@@ -18,12 +18,29 @@ function createPet({ getState, saveState, preload, onDoubleClick }) {
   // 창은 캐릭터보다 넓고 높게: 위쪽에 말풍선 자리
   const dims = () => ({ W: Math.max(size() + 40, 210), H: size() + 80 });
 
+  const packDir = () => path.join(app.getPath('userData'), 'pet-pack');
+
   function config() {
-    const img = st().petImage;
-    return {
-      size: size(),
-      image: img && fs.existsSync(img) ? pathToFileURL(img).href + '?v=' + (st().petImageV || 0) : null,
-    };
+    const s = st(), v = '?v=' + (s.petImageV || 0);
+    const pack = s.petPack;
+    if (pack && fs.existsSync(packDir())) {
+      const url = f => pathToFileURL(path.join(packDir(), f)).href + v;
+      if (pack.kind === 'shimeji') {
+        // shimeji 그림 번호 → 동작 (shimeji 표준 번호 규칙)
+        const have = new Set(pack.files);
+        const pick = (nums, fb) => { const l = nums.filter(n => have.has(`shime${n}.png`)); return (l.length ? l : fb).map(n => url(`shime${n}.png`)); };
+        const base = [have.has('shime1.png') ? 1 : parseInt(pack.files[0].slice(5))];
+        return { size: size(), kind: 'shimeji', frames: {
+          walk: pick([1, 2, 1, 3], base), idle: pick([11], base), sleep: pick([21], have.has('shime11.png') ? [11] : base),
+          fall: pick([4], base), land: pick([18, 19], base), drag: pick([5, 6, 5, 7], base), climb: pick([12, 13, 14, 13], base),
+        } };
+      }
+      // 일반 그림 여러 장: 걷기·벽타기·잡힘은 순서대로 넘기고, 나머지는 첫 장
+      const all = pack.files.map(url), first = [all[0]];
+      return { size: size(), kind: 'frames', frames: { walk: all, climb: all, drag: all, idle: first, sleep: first, fall: first, land: first } };
+    }
+    const img = s.petImage;
+    return { size: size(), image: img && fs.existsSync(img) ? pathToFileURL(img).href + v : null };
   }
   const send = (ch, data) => { if (win && !win.isDestroyed()) win.webContents.send(ch, data); };
 
@@ -140,11 +157,18 @@ function createPet({ getState, saveState, preload, onDoubleClick }) {
   async function pickImage(parent) {
     const r = await dialog.showOpenDialog(parent, {
       title: '캐릭터로 쓸 그림 고르기',
-      filters: [{ name: '그림 (움직이는 GIF 도 됩니다)', extensions: ['png', 'gif', 'jpg', 'jpeg', 'webp'] }],
+      filters: [{ name: '그림 또는 shimeji zip', extensions: ['png', 'gif', 'jpg', 'jpeg', 'webp', 'zip'] }],
       properties: ['openFile'],
     });
     if (r.canceled || !r.filePaths[0]) return false;
     const src = r.filePaths[0];
+    if (path.extname(src).toLowerCase() === '.zip') {
+      try { loadZip(src); }
+      catch (e) { dialog.showMessageBox(parent, { type: 'warning', message: 'zip 파일을 캐릭터로 쓸 수 없습니다.', detail: String(e.message || e), buttons: ['확인'] }); return false; }
+      apply();
+      return true;
+    }
+    clearPack();
     const dest = path.join(app.getPath('userData'), 'pet-image' + path.extname(src).toLowerCase());
     // 원본이 지워져도 계속 쓰도록 앱 폴더에 복사해 둔다
     const old = st().petImage;
@@ -155,7 +179,64 @@ function createPet({ getState, saveState, preload, onDoubleClick }) {
     return true;
   }
 
+  // ── zip 캐릭터 ──
+  // shimeji 묶음(img/…/shime1.png ~ shime46.png)이면 동작별 그림을 쓰고,
+  // 그 밖의 그림 여러 장이 든 zip 이면 이름 순서대로 넘기며 움직인다.
+  // zip 안의 경로는 쓰지 않고 우리가 정한 이름으로만 저장한다(엉뚱한 폴더에 풀리지 않게).
+  const IMG = /\.(png|gif|jpe?g|webp)$/i;
+  function loadZip(src) {
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip(src);
+    const entries = zip.getEntries().filter(e => !e.isDirectory && IMG.test(e.entryName) && !/(^|\/)(__MACOSX|\.)/.test(e.entryName));
+    if (!entries.length) throw new Error('zip 안에 그림 파일(png, gif, jpg, webp)이 없습니다.');
+    if (entries.length > 400) throw new Error('그림이 너무 많습니다 (400장까지).');
+    let total = 0;
+    for (const e of entries) {
+      if (e.header.size > 10 * 1024 * 1024) throw new Error(`${path.basename(e.entryName)} 파일이 너무 큽니다 (한 장에 10MB까지).`);
+      total += e.header.size;
+    }
+    if (total > 150 * 1024 * 1024) throw new Error('그림 전체 크기가 너무 큽니다 (150MB까지).');
+
+    // shimeji 그림이 들어 있는 폴더 찾기 (여러 캐릭터가 들어 있으면 그림이 가장 많은 첫 폴더)
+    const groups = new Map();
+    for (const e of entries) {
+      const m = /(?:^|\/)shime(\d+)\.png$/i.exec(e.entryName);
+      if (!m) continue;
+      const dir = path.posix.dirname(e.entryName);
+      if (!groups.has(dir)) groups.set(dir, []);
+      groups.get(dir).push({ e, n: +m[1] });
+    }
+    const out = packDir();
+    const write = list => {
+      fs.rmSync(out, { recursive: true, force: true });
+      fs.mkdirSync(out, { recursive: true });
+      list.forEach(({ e, name }) => fs.writeFileSync(path.join(out, name), e.getData()));
+    };
+    let pack;
+    if (groups.size) {
+      const [, best] = [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))[0];
+      const list = best.map(({ e, n }) => ({ e, name: `shime${n}.png` }));
+      write(list);
+      pack = { kind: 'shimeji', files: list.map(x => x.name) };
+    } else {
+      const sorted = entries.slice().sort((a, b) => a.entryName.localeCompare(b.entryName, undefined, { numeric: true }));
+      const list = sorted.map((e, i) => ({ e, name: `f${String(i).padStart(3, '0')}${path.extname(e.entryName).toLowerCase()}` }));
+      write(list);
+      pack = { kind: 'frames', files: list.map(x => x.name) };
+    }
+    const s = st();
+    if (s.petImage && fs.existsSync(s.petImage)) { try { fs.unlinkSync(s.petImage); } catch {} }
+    delete s.petImage;
+    s.petPack = pack; s.petImageV = Date.now(); saveState();
+    return pack;
+  }
+  function clearPack() {
+    fs.rmSync(packDir(), { recursive: true, force: true });
+    delete st().petPack;
+  }
+
   function defaultImage() {
+    clearPack();
     const s = st();
     if (s.petImage && fs.existsSync(s.petImage)) { try { fs.unlinkSync(s.petImage); } catch {} }
     delete s.petImage; saveState();
@@ -193,6 +274,7 @@ function createPet({ getState, saveState, preload, onDoubleClick }) {
     apply, hide, pickImage, defaultImage, onMouse, onDrag,
     onDoubleClick: () => onDoubleClick && onDoubleClick(),
     get win() { return win; },
+    loadZip: (src) => { const r = loadZip(src); apply(); return r; },
   };
 }
 

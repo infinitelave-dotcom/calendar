@@ -33,6 +33,14 @@
   body.climb.wall-right #flip { transform:rotate(-90deg); transform-origin:50% 50%; }
   body.climb #pose { animation:bob .4s ease-in-out infinite alternate; }
 
+  /* shimeji 그림: 원래 왼쪽을 보고 있으므로 오른쪽으로 갈 때 뒤집고, 동작은 그림이 바꾸므로 몸 흔들기는 끈다 */
+  body.shimeji #flip { transform:none; }
+  body.shimeji.right #flip, body.shimeji.climb.wall-right #flip { transform:scaleX(-1); }
+  body.shimeji.climb.wall-left #flip { transform:none; }
+  body.shimeji #pose { animation:none !important; transform:none !important; }
+  /* 여러 장 그림: 그림이 넘어가므로 걸을 때 흔들기만 살짝 */
+  body.frames.walk #pose { animation-duration:.5s; }
+
   /* 기본 캐릭터 그림의 부분들 */
   .legL, .legR, .armL, .armR { transform-box:fill-box; }
   .legL, .legR { transform-origin:50% 0%; }
@@ -99,11 +107,30 @@
 <script>
 const body = document.body, pose = $('pose'), charEl = $('char');
 
-// 그림 정하기: 사용자가 고른 그림이 있으면 그것, 없으면 기본 캐릭터
+// ── 여러 장 그림(zip) 넘기기 ──
+let kind = '', frames = null, cur = 'fall', frameTimer = null, frameIdx = 0, frameImg = null;
+const FPS = { walk: 160, climb: 200, drag: 220, land: 220 };   // 동작별 그림 넘기는 간격(ms)
+function playFrames() {
+  clearInterval(frameTimer);
+  if (!frames || !frameImg) return;
+  const list = frames[cur] || frames.walk;
+  frameIdx = 0; frameImg.src = list[0];
+  if (list.length > 1) frameTimer = setInterval(() => { frameIdx = (frameIdx + 1) % list.length; frameImg.src = list[frameIdx]; }, FPS[cur] || 200);
+}
+// 그림을 미리 불러 두어 넘길 때 깜빡이지 않게
+const preload = urls => [...new Set(urls)].forEach(u => { const i = new Image(); i.src = u; });
+
+// 그림 정하기: 사용자가 고른 그림(또는 zip)이 있으면 그것, 없으면 기본 캐릭터
 window.api.onPet('pet-config', cfg => {
   document.documentElement.style.setProperty('--size', cfg.size + 'px');
-  pose.innerHTML = '';
-  if (cfg.image) {
+  pose.innerHTML = ''; frames = null; frameImg = null; clearInterval(frameTimer);
+  kind = cfg.kind || '';
+  body.classList.toggle('shimeji', kind === 'shimeji'); body.classList.toggle('frames', kind === 'frames');
+  if (cfg.frames) {
+    frames = cfg.frames; preload(Object.values(frames).flat());
+    frameImg = document.createElement('img'); frameImg.alt = ''; frameImg.draggable = false;
+    pose.append(frameImg); playFrames();
+  } else if (cfg.image) {
     const img = document.createElement('img'); img.src = cfg.image; img.alt = ''; img.draggable = false;
     pose.append(img);
   } else {
@@ -114,7 +141,8 @@ window.api.onPet('pet-config', cfg => {
 
 // 상태(걷기/앉기/잠/떨어짐/잡힘/벽타기)에 맞는 모습
 window.api.onPet('pet-state', s => {
-  body.className = s.state + (s.dir < 0 ? ' left' : '') + (s.side ? ' wall-' + s.side : '');
+  body.className = s.state + (s.dir < 0 ? ' left' : ' right') + (s.side ? ' wall-' + s.side : '') + (kind ? ' ' + kind : '');
+  if (s.state !== cur) { cur = s.state; playFrames(); }
   if (s.state === 'sleep') say('', 0);
 });
 

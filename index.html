@@ -50,6 +50,27 @@
   .chip { font-size:13px; padding:2px 6px; margin:0 6px; border-radius:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:none; text-shadow:none; min-height:20px; }
   .chip.cl { margin-left:0; border-top-left-radius:0; border-bottom-left-radius:0; }
   .chip.cr { margin-right:0; border-top-right-radius:0; border-bottom-right-radius:0; }
+  /* 일정 띠 끌어서 옮기기 */
+  .chip { cursor:grab; }
+  body.moving, body.moving * { cursor:grabbing !important; }
+  body.moving .chip.src { opacity:.35; }
+  .day.drop { box-shadow:inset 0 0 0 2px var(--accent); background:color-mix(in srgb, var(--accent) 22%, transparent); }
+  /* 검색 · 색 보기 */
+  .tools { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .search { display:flex; align-items:center; gap:6px; background:var(--soft); border-radius:8px; padding:0 8px; flex:0 1 260px; min-width:150px; }
+  .search svg { width:16px; height:16px; flex:none; opacity:.7; }
+  .search input { flex:1; min-width:0; background:transparent; border:0; outline:none; color:var(--fg); font-size:14px; padding:7px 0; text-shadow:var(--ts); }
+  .search input::placeholder { color:var(--muted); }
+  .search button { padding:0 4px; background:transparent; font-size:13px; display:none; }
+  .search.has button { display:block; }
+  .cfilter { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:13px; color:var(--muted); }
+  .cfilter .all { padding:3px 10px; border-radius:12px; font-size:13px; }
+  .cfilter .all.on { background:var(--accent); color:#1B2A41; text-shadow:none; }
+  .cdot { width:20px; height:20px; border-radius:50%; cursor:pointer; border:2px solid var(--line); }
+  .cfilter.active .cdot:not(.on) { opacity:.3; }
+  .cdot.on { border-color:var(--fg); box-shadow:0 0 0 2px rgba(0,0,0,.35) inset; }
+  .ev.result { cursor:pointer; }
+  mark { background:color-mix(in srgb, var(--accent) 55%, transparent); color:inherit; border-radius:3px; padding:0 1px; }
   .more { font-size:12px; color:var(--muted); padding-left:10px; }
 
   /* ── 오른쪽 사이드바 ── */
@@ -108,6 +129,14 @@
       </button>
       <button id="gear">⚙ 설정</button>
     </header>
+    <div class="tools">
+      <div class="search" id="searchBox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <input id="q" placeholder="일정 검색" maxlength="50">
+        <button id="qClear" type="button" title="검색 지우기">✕</button>
+      </div>
+      <div class="cfilter" id="cfilter"></div>
+    </div>
     <div class="dows" id="dows"></div>
     <div class="days" id="days"></div>
   </section>
@@ -135,10 +164,10 @@
       <div class="row"><input type="checkbox" id="petOn"> 캐릭터가 화면을 돌아다니기</div>
       <div class="row">크기 <input type="range" id="petSize" min="48" max="200"></div>
       <div class="btns">
-        <button type="button" id="petPick" title="PNG, GIF(움직이는 그림), JPG, WEBP">내 그림으로 바꾸기</button>
+        <button type="button" id="petPick" title="PNG, GIF(움직이는 그림), JPG, WEBP, 또는 shimeji zip">내 그림·zip 으로 바꾸기</button>
         <button type="button" id="petDefault">기본 캐릭터</button>
       </div>
-      <div class="hint">캐릭터를 클릭하면 오늘 일정을 알려주고, 끌어서 던질 수 있어요. 더블클릭하면 달력 편집 모드가 됩니다.</div>
+      <div class="hint">shimeji 캐릭터 zip(shime1.png ~ shime46.png)을 고르면 걷기·떨어지기·벽타기 그림이 그대로 쓰이고, 그림 여러 장이 든 zip 은 순서대로 넘기며 움직여요. 캐릭터를 클릭하면 오늘 일정을 알려주고, 끌어서 던질 수 있어요. 더블클릭하면 달력 편집 모드가 됩니다.</div>
       <hr>
       <label>초기화</label>
       <div class="btns">
@@ -205,8 +234,41 @@ function applyCfg() {
   swatches('evSw', EV_COLORS, cfg.evColor, set('evColor'));
 }
 
+// ── 검색 · 색 보기 ──
+let query = '';
+let colorFilter = new Set(load('colorFilter', []));   // 비어 있으면 모든 색
+const norm = t => t.toLowerCase().replace(/\s+/g, '');
+const passes = ev => (!colorFilter.size || colorFilter.has(ev.color.toLowerCase()))
+                    && (!query || norm(ev.text).includes(norm(query)));
+const shown = () => live(events).filter(passes);
+
+function renderFilter() {
+  const box = $('cfilter'); box.innerHTML = '';
+  // 일정에 쓰인 색만 보여준다 (기본 색 순서대로, 그 밖의 색은 뒤에)
+  const used = [...new Set(live(events).map(e => e.color.toLowerCase()))];
+  const order = EV_COLORS.map(c => c.toLowerCase());
+  used.sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99));
+  [...colorFilter].forEach(c => { if (!used.includes(c)) colorFilter.delete(c); });
+  if (used.length < 2 && !colorFilter.size) return;     // 색이 하나뿐이면 고를 필요가 없다
+  box.classList.toggle('active', colorFilter.size > 0);
+  const lab = document.createElement('span'); lab.textContent = '색 보기'; box.append(lab);
+  const all = document.createElement('button'); all.type = 'button'; all.className = 'all' + (colorFilter.size ? '' : ' on'); all.textContent = '전체';
+  all.onclick = () => { colorFilter.clear(); save('colorFilter', []); render(); };
+  box.append(all);
+  used.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'cdot' + (colorFilter.has(c) ? ' on' : ''); d.style.background = c;
+    d.title = colorFilter.has(c) ? '이 색 빼기' : '이 색만 보기 (여러 개 고를 수 있어요)';
+    d.onclick = () => { colorFilter.has(c) ? colorFilter.delete(c) : colorFilter.add(c); save('colorFilter', [...colorFilter]); render(); };
+    box.append(d);
+  });
+}
+$('q').oninput = e => { query = e.target.value.trim(); $('searchBox').classList.toggle('has', !!e.target.value); render(); };
+$('q').onkeydown = e => { if (e.key === 'Escape') { $('qClear').click(); } };
+$('qClear').onclick = () => { $('q').value = ''; query = ''; $('searchBox').classList.remove('has'); render(); $('q').focus(); };
+
 // 그 날짜에 걸친 일정 (여러 날 일정을 먼저, 그다음 시간순)
-const eventsOn = k => live(events).filter(e => e.start <= k && k <= e.end)
+const eventsOn = k => shown().filter(e => e.start <= k && k <= e.end)
   .sort((a, b) => ((b.start !== b.end) - (a.start !== a.end)) || a.start.localeCompare(b.start)
                   || (a.time || '99').localeCompare(b.time || '99') || a.id.localeCompare(b.id));
 const range = () => selStart <= selEnd ? [selStart, selEnd] : [selEnd, selStart];
@@ -237,32 +299,63 @@ function render() {
       c.className = 'chip' + (multi && k > ev.start && !rowStart ? ' cl' : '') + (multi && k < ev.end && !rowEnd ? ' cr' : '');
       c.style.background = ev.color; c.style.color = isLight(ev.color) ? '#1B2A41' : '#F6F4EE';
       c.textContent = (!multi || k === ev.start || rowStart) ? (ev.time && k === ev.start ? ev.time + ' ' : '') + ev.text : ' ';
-      c.title = ev.text + ' (더블클릭해서 이름 수정)'; c.dataset.id = ev.id;
+      c.title = ev.text + '\n끌어서 다른 날짜로 옮기기 · 더블클릭해서 이름 수정'; c.dataset.id = ev.id;
       cell.append(c);
     });
     if (list.length > 3) { const m = document.createElement('div'); m.className = 'more'; m.textContent = `+${list.length - 3}개 더`; cell.append(m); }
     box.append(cell);
   }
+  renderFilter();
   renderSide();
 }
 
 const fmt = k => { const d = parse(k); return `${d.getMonth()+1}월 ${d.getDate()}일`; };
 const days = (a, b) => Math.round((parse(b) - parse(a)) / 86400000) + 1;
 
+// 검색어 부분을 강조해서 글자 넣기 (글자는 textContent 로만 넣는다)
+function highlight(el, text) {
+  el.textContent = '';
+  const q = query && norm(query);
+  if (!q) { el.textContent = text; return; }
+  // 띄어쓰기를 무시하고 찾은 위치를 원래 글자 위치로 바꾼다
+  const map = []; let flat = '';
+  [...text].forEach((ch, i) => { if (!/\s/.test(ch)) { map.push(i); flat += ch.toLowerCase(); } });
+  const at = flat.indexOf(q);
+  if (at < 0) { el.textContent = text; return; }
+  const s0 = map[at], s1 = map[at + q.length - 1] + 1;
+  const m = document.createElement('mark'); m.textContent = text.slice(s0, s1);
+  el.append(text.slice(0, s0), m, text.slice(s1));
+}
+
 function renderSide() {
   const [a, b] = range();
-  $('selLabel').textContent = a === b ? `${fmt(a)} ${DOW[parse(a).getDay()]}요일` : `${fmt(a)} ~ ${fmt(b)} (${days(a, b)}일)`;
   $('startDate').value = a; $('endDate').value = b;
-  const list = live(events).filter(e => e.start <= b && a <= e.end)
-    .sort((x, y) => x.start.localeCompare(y.start) || (x.time || '99').localeCompare(y.time || '99'));
-  $('selSub').textContent = list.length ? `일정 ${list.length}개` : '';
-  $('list').innerHTML = list.length ? '' : '<div class="empty">일정이 없습니다. 아래에서 추가하세요.</div>';
+  const searching = !!query;
+  let list;
+  if (searching) {
+    // 검색 중: 날짜와 상관없이 맞는 일정 전부
+    list = shown().sort((x, y) => x.start.localeCompare(y.start) || (x.time || '99').localeCompare(y.time || '99'));
+    $('selLabel').textContent = `"${query}" 검색 결과`;
+    $('selSub').textContent = list.length ? `${list.length}개 · 누르면 그 날짜로 이동` : '';
+  } else {
+    $('selLabel').textContent = a === b ? `${fmt(a)} ${DOW[parse(a).getDay()]}요일` : `${fmt(a)} ~ ${fmt(b)} (${days(a, b)}일)`;
+    list = shown().filter(e => e.start <= b && a <= e.end)
+      .sort((x, y) => x.start.localeCompare(y.start) || (x.time || '99').localeCompare(y.time || '99'));
+    $('selSub').textContent = list.length ? `일정 ${list.length}개` + (colorFilter.size ? ' (고른 색만)' : '') : '';
+  }
+  $('list').innerHTML = list.length ? '' : `<div class="empty">${searching ? '찾는 일정이 없습니다.' : colorFilter.size ? '고른 색의 일정이 없습니다.' : '일정이 없습니다. 아래에서 추가하세요.'}</div>`;
   list.forEach(ev => {
-    const row = document.createElement('div'); row.className = 'ev'; row.style.borderLeftColor = ev.color;
+    const row = document.createElement('div'); row.className = 'ev' + (searching ? ' result' : ''); row.style.borderLeftColor = ev.color;
     const info = document.createElement('div'); info.className = 'info';
-    const meta = [ev.start !== ev.end ? `${fmt(ev.start)} ~ ${fmt(ev.end)}` : (a !== b ? fmt(ev.start) : ''), ev.time].filter(Boolean).join(' · ');
+    const meta = [ev.start !== ev.end ? `${fmt(ev.start)} ~ ${fmt(ev.end)}` : (a !== b || searching ? fmt(ev.start) : ''), ev.time].filter(Boolean).join(' · ');
     if (meta) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = meta; info.append(m); }
-    const t = document.createElement('div'); t.className = 'txt'; t.textContent = ev.text;
+    const t = document.createElement('div'); t.className = 'txt'; highlight(t, ev.text);
+    // 검색 결과를 누르면 그 날짜로 이동
+    if (searching) row.onclick = e => {
+      if (e.target.closest('button, input') || e.detail > 1) return;
+      const d = parse(ev.start); view = new Date(d.getFullYear(), d.getMonth(), 1);
+      selStart = ev.start; selEnd = ev.end; render();
+    };
     // 더블클릭하면 그 자리에서 이름 고치기
     const edit = () => inlineEdit(t, ev.text, { onDone: v => { if (v) { ev.text = v; touch(ev); saveEvents(); } render(); } });
     row.title = '더블클릭해서 이름 수정'; row.dataset.id = ev.id; row._edit = edit;
@@ -272,6 +365,18 @@ function renderSide() {
     del.onclick = () => { ev.deleted = true; touch(ev); saveEvents(); render(); };
     row.append(del); $('list').append(row);
   });
+}
+
+// 날짜 더하기 (YYYY-MM-DD)
+const addDays = (k, n) => { const d = parse(k); d.setDate(d.getDate() + n); return key(d); };
+const diffDays = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
+
+// 일정 띠 끌어서 다른 날짜로 옮기기: { ev, from(잡은 날), delta(옮길 날 수) }
+let moving = null;
+function showDrop() {
+  const ev = moving.ev, s0 = addDays(ev.start, moving.delta), s1 = addDays(ev.end, moving.delta);
+  document.querySelectorAll('#days .day').forEach(c => c.classList.toggle('drop', moving.delta !== 0 && c.dataset.k >= s0 && c.dataset.k <= s1));
+  document.querySelectorAll('#days .chip').forEach(c => c.classList.toggle('src', moving.delta !== 0 && c.dataset.id === ev.id));
 }
 
 // 날짜 클릭 / 끌어서 여러 날 선택
@@ -289,14 +394,37 @@ $('days').addEventListener('mousedown', e => {
     if (row) row._edit();
     return;
   }
+  if (chip) {   // 일정 띠를 잡으면: 끌면 옮기기, 그냥 놓으면 그 날짜 고르기
+    const ev = events.find(x => x.id === chip.dataset.id);
+    if (ev) { e.preventDefault(); moving = { ev, from: el.dataset.k, delta: 0 }; return; }
+  }
   dragging = true; selStart = selEnd = el.dataset.k; render();
 });
 $('days').addEventListener('mouseover', e => {
+  if (moving) {
+    const el = e.target.closest('.day'); if (!el) return;
+    const d = diffDays(moving.from, el.dataset.k);
+    if (d !== moving.delta) { moving.delta = d; document.body.classList.toggle('moving', d !== 0); showDrop(); }
+    return;
+  }
   if (!dragging) return;
   const el = e.target.closest('.day'); if (!el || el.dataset.k === selEnd) return;
   selEnd = el.dataset.k; render();
 });
 window.addEventListener('mouseup', () => {
+  if (moving) {
+    const { ev, from, delta } = moving; moving = null;
+    document.body.classList.remove('moving');
+    if (delta) {
+      ev.start = addDays(ev.start, delta); ev.end = addDays(ev.end, delta); touch(ev); saveEvents();
+      selStart = selEnd = addDays(from, delta);
+      localStorage.removeItem('notified:' + ev.id);   // 날짜가 바뀌었으니 알림 다시
+    } else {
+      selStart = selEnd = from;
+    }
+    render();
+    return;
+  }
   if (!dragging) return;
   dragging = false;
   const [a] = range(); const d = parse(a);
