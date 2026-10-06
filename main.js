@@ -308,6 +308,21 @@ ipcMain.on('set-memo-locked', (_e, on) => setMemoLocked(on));
 ipcMain.on('desktop-mode', () => enterDesktopMode());
 ipcMain.on('set-memo-visible', (_e, on) => setMemoVisible(on));
 ipcMain.on('check-update', () => checkForUpdates(true));
+// 초기화: 창 위치·크기·잠금·모드를 처음 상태로 되돌리고 두 창을 다시 불러온다 (지울 저장 내용은 화면 쪽에서 먼저 지움)
+ipcMain.on('reset', () => {
+  if (fallbackTimer) { clearInterval(fallbackTimer); fallbackTimer = null; }
+  allWindows().forEach(unembed);
+  state = { seenHint: true, mode: 'edit' }; saveState();
+  mode = 'edit';
+  const wa = screen.getPrimaryDisplay().workArea;
+  const main = mainWin(), memo = memoWin();
+  [main, memo].forEach(w => { if (w) { w.setMovable(true); w.setResizable(true); } });
+  if (main) main.setBounds({ x: wa.x + Math.round((wa.width - 1000) / 2), y: wa.y + Math.round((wa.height - 700) / 2), width: 1000, height: 700 });
+  if (memo) { memo.setBounds({ x: wa.x + wa.width - 340, y: wa.y + 20, width: 320, height: 380 }); memo.show(); }
+  allWindows().forEach(m => m.win.webContents.reload());
+  if (main) main.focus();
+  setTimeout(keepMemoAbove, 300);
+});
 ipcMain.on('notify', (_e, title, body) => new Notification({ title, body }).show());
 ipcMain.on('quit', () => app.quit());
 

@@ -131,6 +131,12 @@
       <div class="row" id="versionRow"></div>
       <button id="updateBtn" type="button">업데이트 확인</button>
       <hr>
+      <label>초기화</label>
+      <div class="btns">
+        <button type="button" id="resetSettings" title="색상·투명도·창 위치·잠금을 처음 상태로 (일정과 메모는 그대로)">설정 초기화</button>
+        <button type="button" id="resetAll" title="일정과 메모까지 모두 지우고 처음 상태로">전체 초기화</button>
+      </div>
+      <hr>
       <button id="closeSettings" type="button">닫기</button>
       <button id="quit" type="button">프로그램 종료</button>
     </div>
@@ -222,7 +228,7 @@ function render() {
       c.className = 'chip' + (multi && k > ev.start && !rowStart ? ' cl' : '') + (multi && k < ev.end && !rowEnd ? ' cr' : '');
       c.style.background = ev.color; c.style.color = isLight(ev.color) ? '#1B2A41' : '#F6F4EE';
       c.textContent = (!multi || k === ev.start || rowStart) ? (ev.time && k === ev.start ? ev.time + ' ' : '') + ev.text : ' ';
-      c.title = ev.text;
+      c.title = ev.text + ' (더블클릭해서 이름 수정)'; c.dataset.id = ev.id;
       cell.append(c);
     });
     if (list.length > 3) { const m = document.createElement('div'); m.className = 'more'; m.textContent = `+${list.length - 3}개 더`; cell.append(m); }
@@ -247,11 +253,12 @@ function renderSide() {
     const info = document.createElement('div'); info.className = 'info';
     const meta = [ev.start !== ev.end ? `${fmt(ev.start)} ~ ${fmt(ev.end)}` : (a !== b ? fmt(ev.start) : ''), ev.time].filter(Boolean).join(' · ');
     if (meta) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = meta; info.append(m); }
-    const t = document.createElement('div'); t.className = 'txt'; t.textContent = ev.text; t.title = '더블클릭해서 이름 수정';
+    const t = document.createElement('div'); t.className = 'txt'; t.textContent = ev.text;
+    // 더블클릭하면 그 자리에서 이름 고치기
     const edit = () => inlineEdit(t, ev.text, { onDone: v => { if (v) { ev.text = v; touch(ev); saveEvents(); } render(); } });
-    t.ondblclick = edit;
+    row.title = '더블클릭해서 이름 수정'; row.dataset.id = ev.id; row._edit = edit;
+    row.ondblclick = e => { if (!e.target.closest('button, input')) edit(); };
     info.append(t); row.append(info);
-    const ed = document.createElement('button'); ed.textContent = '수정'; ed.onclick = edit; row.append(ed);
     const del = document.createElement('button'); del.textContent = '삭제';
     del.onclick = () => { ev.deleted = true; touch(ev); saveEvents(); render(); };
     row.append(del); $('list').append(row);
@@ -260,8 +267,19 @@ function renderSide() {
 
 // 날짜 클릭 / 끌어서 여러 날 선택
 let dragging = false;
+// 달력 칸은 누를 때마다 다시 그려져서 브라우저의 더블클릭이 안 잡히므로 직접 센다
+let lastChip = { id: null, t: 0 };
 $('days').addEventListener('mousedown', e => {
   const el = e.target.closest('.day'); if (!el || e.button !== 0) return;
+  const chip = e.target.closest('.chip');
+  const dbl = chip && chip.dataset.id === lastChip.id && Date.now() - lastChip.t < 450;
+  lastChip = { id: chip ? chip.dataset.id : null, t: Date.now() };
+  if (dbl) {   // 달력의 일정 띠를 더블클릭 → 오른쪽 목록에서 바로 이름 고치기
+    e.preventDefault(); lastChip.id = null;
+    const row = [...document.querySelectorAll('#list .ev')].find(r => r.dataset.id === chip.dataset.id);
+    if (row) row._edit();
+    return;
+  }
   dragging = true; selStart = selEnd = el.dataset.k; render();
 });
 $('days').addEventListener('mouseover', e => {
@@ -304,6 +322,22 @@ $('quit').onclick = () => window.api.quit();
 window.api.getAutostart().then(v => $('auto').checked = v);
 $('auto').onchange = e => window.api.setAutostart(e.target.checked);
 $('updateBtn').onclick = () => window.api.checkUpdate();
+
+// ── 초기화 ──
+// 설정 초기화: 색상·투명도·창 위치·크기·잠금을 처음 상태로. 일정과 메모는 남긴다.
+// 전체 초기화: 일정·메모까지 모두 지운다.
+const SETTING_KEYS = ['cfg', 'memoCfg'];
+$('resetSettings').onclick = () => {
+  if (!confirm('색상, 투명도, 창 위치와 크기, 잠금을 처음 상태로 되돌릴까요?\n(일정과 메모는 그대로 남습니다)')) return;
+  SETTING_KEYS.forEach(k => localStorage.removeItem(k));
+  window.api.reset();
+};
+$('resetAll').onclick = () => {
+  if (!confirm('일정과 메모를 포함해 모든 내용을 지우고 처음 상태로 되돌릴까요?')) return;
+  if (!confirm('정말 모두 지울까요? 지운 일정과 메모는 되돌릴 수 없습니다.')) return;
+  localStorage.clear();
+  window.api.reset();
+};
 
 // 잠금 / 바탕화면 고정 / 메모 창
 let locked = false, memoVisible = true;

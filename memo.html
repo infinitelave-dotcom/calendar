@@ -25,9 +25,20 @@
   .opbar.open { display:flex; }
   .opbar input { flex:1; }
   .opbar span { width:34px; text-align:right; }
-  textarea { flex:1; min-height:0; resize:none; border:0; outline:none; background:transparent; color:var(--ink);
-             padding:10px 14px 14px; font-size:16px; line-height:1.55; font-family:inherit; user-select:text; }
-  textarea::placeholder { color:var(--ink); opacity:.45; }
+  #text { flex:1; min-height:0; overflow-y:auto; outline:none; color:var(--ink); padding:10px 14px 14px; font-size:16px; line-height:1.55;
+          user-select:text; word-break:break-word; position:relative; }
+  #text:empty::before { content:attr(data-ph); opacity:.45; pointer-events:none; }
+  /* 메모 속 표 */
+  #text table { border-collapse:collapse; width:100%; margin:6px 0; table-layout:fixed; }
+  #text td { border:1px solid color-mix(in srgb, var(--ink) 40%, transparent); padding:3px 6px; vertical-align:top; min-width:30px; font-size:15px; }
+  #text tr:first-child td { font-weight:700; background:rgba(0,0,0,.06); }
+  #text td.cur { box-shadow:inset 0 0 0 2px color-mix(in srgb, var(--ink) 55%, transparent); }
+  /* 표 편집 도구 (표 안에 있을 때만 보임) */
+  #ttools { display:none; position:absolute; z-index:3; gap:2px; background:#2B2F36; border-radius:8px; padding:3px; box-shadow:0 4px 12px rgba(0,0,0,.35); }
+  #ttools.show { display:flex; }
+  #ttools button { background:transparent; border:0; color:#F6F4EE; font-size:12px; padding:4px 7px; border-radius:5px; cursor:pointer; font-family:inherit; white-space:nowrap; text-shadow:none; }
+  #ttools button:hover { background:rgba(255,255,255,.15); }
+  #ttools button.danger { color:#FF9B8A; }
   /* 아래쪽 시트 탭 (엑셀처럼) */
   .sheets { display:flex; align-items:flex-start; gap:2px; overflow-x:auto; flex:none; height:34px; scrollbar-width:none; }
   .sheets::-webkit-scrollbar { display:none; }
@@ -46,21 +57,32 @@
     <div class="bar">
       <div class="title" id="title"></div>
       <div id="dots" style="display:flex;gap:5px"></div>
+      <button id="tableBtn" title="표 넣기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg></button>
       <button id="opBtn" title="메모 투명도"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
       <button id="lockBtn" title="메모 위치·크기 잠금 (달력 잠금과 별도)"></button>
       <button id="hide" title="메모 창 숨기기 (달력 위 [메모] 버튼으로 다시 열기)">✕</button>
     </div>
     <div class="opbar" id="opbar">투명도 <input type="range" id="opacity" min="15" max="100"><span id="opVal"></span></div>
-    <textarea id="text" placeholder="여기에 메모를 적으세요"></textarea>
+    <div id="text" contenteditable="true" spellcheck="false" data-ph="여기에 메모를 적으세요"></div>
   </div>
   <div class="sheets" id="sheets"></div>
 </div>
+<div id="ttools">
+  <button data-t="rowAdd" title="아래에 줄 추가">+ 줄</button>
+  <button data-t="colAdd" title="오른쪽에 칸 추가">+ 칸</button>
+  <button data-t="rowDel" title="이 줄 삭제">− 줄</button>
+  <button data-t="colDel" title="이 칸 삭제">− 칸</button>
+  <button data-t="tableDel" class="danger" title="표 삭제">표 삭제</button>
+</div>
 <script src="common.js"></script>
 <script>
+const ed = $('text');
 const MEMO_COLORS = ['#FFE88A','#FFC1CC','#BDE8C0','#B9DDF7','#E1CFFF','#FFD3A8','#F4F1EA'];
 
-// 메모: [{id, title, text, color, u, deleted}]
-let memos = load('memos', null) || [touch({ id: uid(), title: '', text: '', color: MEMO_COLORS[0] })];
+// 메모: [{id, title, html, text, color, u, deleted}]  (html = 표가 들어갈 수 있는 내용, text = 글자만)
+const esc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let memos = load('memos', null) || [touch({ id: uid(), title: '', html: '', text: '', color: MEMO_COLORS[0] })];
+memos.forEach(m => { if (m.html === undefined) m.html = esc(m.text || '').replace(/\n/g, '<br>'); });
 let active = load('activeMemo', null);
 const saveMemos = () => { save('memos', memos); save('activeMemo', active); };
 const liveMemos = () => live(memos);
@@ -68,7 +90,7 @@ function cur() {
   let m = liveMemos().find(x => x.id === active);
   if (!m) {
     m = liveMemos()[0];
-    if (!m) { m = touch({ id: uid(), title: '', text: '', color: MEMO_COLORS[0] }); memos.push(m); save('memos', memos); }
+    if (!m) { m = touch({ id: uid(), title: '', html: '', text: '', color: MEMO_COLORS[0] }); memos.push(m); save('memos', memos); }
     active = m.id; save('activeMemo', active);
   }
   return m;
@@ -103,8 +125,7 @@ $('lockBtn').onclick = () => { locked = !locked; showLock(); window.api.setMemoL
 function render() {
   const m = cur();
   document.documentElement.style.setProperty('--paper', paperOf(m.color));
-  const ta = $('text');
-  if (ta.value !== m.text) ta.value = m.text;
+  if (ed.dataset.id !== m.id || cleanHtml() !== m.html) { ed.innerHTML = m.html; ed.dataset.id = m.id; hideTools(); }
   $('title').textContent = m.title;
   // 종이 색
   const dots = $('dots'); dots.innerHTML = '';
@@ -131,25 +152,117 @@ function render() {
   const add = document.createElement('button');
   add.className = 'add'; add.textContent = '+'; add.title = '새 메모';
   add.onclick = () => {
-    const memo = touch({ id: uid(), title: '', text: '', color: MEMO_COLORS[liveMemos().length % MEMO_COLORS.length] });
-    memos.push(memo); active = memo.id; saveMemos(); render(); $('text').focus();
+    const memo = touch({ id: uid(), title: '', html: '', text: '', color: MEMO_COLORS[liveMemos().length % MEMO_COLORS.length] });
+    memos.push(memo); active = memo.id; saveMemos(); render(); ed.focus();
   };
   bar.append(add);
 }
 
 function remove(memo) {
   if (liveMemos().length === 1) {
-    if (confirm('메모 내용을 모두 지울까요?')) { memo.text = ''; memo.title = ''; touch(memo); saveMemos(); render(); }
+    if (confirm('메모 내용을 모두 지울까요?')) { memo.html = ''; memo.text = ''; memo.title = ''; touch(memo); saveMemos(); render(); }
     return;
   }
   if (!confirm(`${memo.title ? `"${memo.title}"` : '이'} 메모를 삭제할까요?`)) return;
   const list = liveMemos(), i = list.indexOf(memo);
-  memo.deleted = true; memo.text = ''; touch(memo);
+  memo.deleted = true; memo.html = ''; memo.text = ''; touch(memo);
   if (active === memo.id) active = (list[i - 1] || list[i + 1]).id;
   saveMemos(); render();
 }
 
-$('text').oninput = e => { const m = cur(); m.text = e.target.value; touch(m); saveMemos(); };
+// ── 메모 내용 편집 ──
+const cleanHtml = () => ed.innerHTML.replace(/ class="cur"/g, '');   // 커서 칸 표시는 저장하지 않는다
+function saveText() {
+  const m = cur();
+  // 다 지웠을 때 남는 빈 줄바꿈은 비워서 안내 문구가 다시 보이게
+  if (ed.innerText.trim() === '' && !ed.querySelector('table')) ed.innerHTML = '';
+  m.html = cleanHtml(); m.text = ed.innerText; touch(m); saveMemos();
+}
+ed.addEventListener('input', saveText);
+// 붙여넣기·끌어넣기는 글자만 (다른 곳의 서식이나 위험한 내용이 섞이지 않게)
+ed.addEventListener('paste', e => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
+ed.addEventListener('drop', e => { e.preventDefault(); const t = e.dataTransfer.getData('text/plain'); if (t) document.execCommand('insertText', false, t); });
+
+// ── 표 ──
+function caretInEditor() {
+  const sel = getSelection();
+  return sel.rangeCount && ed.contains(sel.getRangeAt(0).startContainer);
+}
+function insertTable(rows = 3, cols = 3) {
+  ed.focus();
+  if (!caretInEditor()) {               // 커서가 없으면 맨 끝에 넣는다
+    const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false);
+    getSelection().removeAllRanges(); getSelection().addRange(r);
+  }
+  const row = '<tr>' + '<td><br></td>'.repeat(cols) + '</tr>';
+  document.execCommand('insertHTML', false, `<table><tbody>${row.repeat(rows)}</tbody></table><div><br></div>`);
+  const tables = ed.querySelectorAll('table');
+  // 방금 넣은 표의 첫 칸으로 커서 이동
+  const sel = getSelection(); const anchor = sel.anchorNode;
+  let t = [...tables].reverse().find(tb => tb.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING) || tables[tables.length - 1];
+  if (t) placeCaret(t.rows[0].cells[0]);
+  saveText();
+}
+function placeCaret(cell) {
+  const r = document.createRange(); r.selectNodeContents(cell); r.collapse(true);
+  getSelection().removeAllRanges(); getSelection().addRange(r);
+}
+const curCell = () => {
+  const sel = getSelection(); if (!sel.rangeCount) return null;
+  let n = sel.anchorNode; if (n && n.nodeType === 3) n = n.parentNode;
+  const td = n && n.closest && n.closest('td');
+  return td && ed.contains(td) ? td : null;
+};
+const tools = $('ttools');
+function hideTools() { tools.classList.remove('show'); ed.querySelectorAll('td.cur').forEach(c => c.classList.remove('cur')); }
+function showTools() {
+  const td = curCell();
+  ed.querySelectorAll('td.cur').forEach(c => c !== td && c.classList.remove('cur'));
+  if (!td) { tools.classList.remove('show'); return; }
+  td.classList.add('cur');
+  const tb = td.closest('table').getBoundingClientRect();
+  tools.classList.add('show');
+  const top = Math.max(2, tb.top - tools.offsetHeight - 4);
+  tools.style.top = (top < 40 ? tb.bottom + 4 : top) + 'px';
+  tools.style.left = Math.max(4, Math.min(tb.left, innerWidth - tools.offsetWidth - 4)) + 'px';
+}
+document.addEventListener('selectionchange', () => { if (document.activeElement === ed) showTools(); });
+ed.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== ed) hideTools(); }, 150));
+ed.addEventListener('scroll', () => tools.classList.contains('show') && showTools());
+// 도구 버튼을 눌러도 커서가 표에서 빠지지 않도록
+tools.addEventListener('mousedown', e => e.preventDefault());
+tools.addEventListener('click', e => {
+  const b = e.target.closest('button'); const td = curCell(); if (!b || !td) return;
+  const tr = td.parentNode, table = tr.closest('table'), ci = td.cellIndex;
+  const blank = () => { const c = document.createElement('td'); c.innerHTML = '<br>'; return c; };
+  switch (b.dataset.t) {
+    case 'rowAdd': { const nr = document.createElement('tr'); [...tr.cells].forEach(() => nr.append(blank())); tr.after(nr); placeCaret(nr.cells[ci]); break; }
+    case 'colAdd': [...table.rows].forEach(r => r.cells[ci].after(blank())); placeCaret(tr.cells[ci + 1]); break;
+    case 'rowDel':
+      if (table.rows.length === 1) { table.remove(); hideTools(); break; }
+      { const next = tr.nextElementSibling || tr.previousElementSibling; tr.remove(); placeCaret(next.cells[Math.min(ci, next.cells.length - 1)]); }
+      break;
+    case 'colDel':
+      if (tr.cells.length === 1) { table.remove(); hideTools(); break; }
+      [...table.rows].forEach(r => r.cells[ci].remove()); placeCaret(tr.cells[Math.min(ci, tr.cells.length - 1)]);
+      break;
+    case 'tableDel': if (confirm('표를 삭제할까요?')) { table.remove(); hideTools(); } break;
+  }
+  saveText(); showTools();
+});
+// 표 안에서 Tab = 다음 칸, Shift+Tab = 이전 칸, 마지막 칸에서 Tab = 줄 추가
+ed.addEventListener('keydown', e => {
+  if (e.key !== 'Tab') return;
+  const td = curCell(); if (!td) return;
+  e.preventDefault();
+  const cells = [...td.closest('table').querySelectorAll('td')], i = cells.indexOf(td);
+  if (e.shiftKey) { if (i > 0) placeCaret(cells[i - 1]); return; }
+  if (i < cells.length - 1) { placeCaret(cells[i + 1]); return; }
+  const tr = td.parentNode, nr = document.createElement('tr');
+  [...tr.cells].forEach(() => { const c = document.createElement('td'); c.innerHTML = '<br>'; nr.append(c); });
+  tr.after(nr); placeCaret(nr.cells[0]); saveText();
+});
+$('tableBtn').onclick = () => insertTable();
 $('hide').onclick = () => window.api.setMemoVisible(false);
 
 // 다른 창에서 메모가 바뀌면 다시 그리기
