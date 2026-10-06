@@ -83,7 +83,6 @@
               background:rgb(var(--base)); border:1px solid var(--line); box-shadow:0 8px 24px rgba(0,0,0,.35); }
   #settings.open { display:flex; }
   #settings > * { flex:none; }
-  #syncBox { display:flex; flex-direction:column; gap:8px; }
   #settings .row { display:flex; align-items:center; gap:8px; font-size:14px; }
   #settings input[type=range] { flex:1; }
   #settings hr { width:100%; border:0; border-top:1px solid var(--line); margin:2px 0; }
@@ -127,10 +126,6 @@
       <div class="row"><input type="checkbox" id="mon"> 월요일부터 시작</div>
       <div class="row"><input type="checkbox" id="auto"> 컴퓨터 켤 때 자동 실행</div>
 
-      <hr>
-      <div class="row"><b>집·회사 연동</b></div>
-      <div id="syncBox"></div>
-      <div class="status" id="syncStatus"></div>
 
       <hr>
       <div class="row" id="versionRow"></div>
@@ -161,8 +156,6 @@
   </aside>
 </div>
 <script src="common.js"></script>
-<script src="firebase-config.js"></script>
-<script src="sync.js"></script>
 <script>
 const DOW = ['일','월','화','수','목','금','토'];
 const EV_COLORS = ['#F2A65A','#FF8A80','#FFD166','#8BD3A0','#7FC8F8','#B69CFF','#F4A6D7','#D9D9D9'];
@@ -181,8 +174,7 @@ if (!events) {   // 예전 형식(날짜별 목록)에서 옮기기
   for (const k in old) old[k].forEach(e => events.push({ id: e.id || uid(), text: e.text, start: k, end: k, time: e.time || '', color: e.color || EV_COLORS[0], u: 0 }));
   save('events2', events);
 }
-const saveEvents = () => { save('events2', events); Sync.schedulePush(); };
-Sync.onLocalChanged = () => { events = load('events2', []); render(); };
+const saveEvents = () => save('events2', events);
 
 let cfg = loadCfg();
 let view = new Date(); view.setDate(1);
@@ -327,45 +319,9 @@ $('pinBtn').onclick = () => { $('settings').classList.remove('open'); window.api
 window.api.onState(s => {
   locked = s.locked; memoVisible = s.memoVisible; showButtons();
   if (s.version) $('versionRow').textContent = `현재 버전 ${s.version}`;
-  if (s.mode === 'edit') Sync.syncNow();
 });
 showButtons();
 
-// ── 연동 화면 ──
-function renderSync() {
-  const box = $('syncBox');
-  $('syncStatus').textContent = Sync.status;
-  if (!Sync.configured) {
-    box.innerHTML = '<div class="hint">연동 서버(Firebase)가 아직 설정되지 않았습니다. 설정 방법은 README 를 참고하세요.</div>';
-    return;
-  }
-  if (Sync.auth) {
-    if (box.dataset.state === 'in') { $('syncInfo').textContent = syncInfo(); return; }
-    box.dataset.state = 'in';
-    box.innerHTML = `<div class="hint" id="syncInfo"></div>
-      <div class="btns"><button type="button" id="syncNow">지금 동기화</button><button type="button" id="syncOut">로그아웃</button></div>`;
-    $('syncInfo').textContent = syncInfo();
-    $('syncNow').onclick = () => Sync.syncNow();
-    $('syncOut').onclick = () => { if (confirm('로그아웃할까요? 이 컴퓨터의 일정과 메모는 그대로 남습니다.')) Sync.logout(); };
-  } else {
-    if (box.dataset.state === 'out') return;
-    box.dataset.state = 'out';
-    box.innerHTML = `<input class="field" id="syncId" placeholder="아이디 (영문·숫자)" maxlength="30">
-      <input class="field" id="syncPw" type="password" placeholder="비밀번호 (6자 이상)">
-      <div class="btns"><button type="button" id="syncIn" class="primary">로그인</button><button type="button" id="syncNew">새로 가입</button></div>
-      <div class="hint">집과 회사에서 같은 아이디로 로그인하면 일정과 메모가 함께 보입니다. 처음 한 번은 "새로 가입"을 누르세요.</div>`;
-    const go = async (isNew) => {
-      const id = $('syncId').value, pw = $('syncPw').value;
-      if (!id || !pw) { $('syncStatus').textContent = '아이디와 비밀번호를 입력하세요.'; return; }
-      if (await Sync.login(id, pw, isNew)) { events = load('events2', []); render(); }
-    };
-    $('syncIn').onclick = () => go(false);
-    $('syncNew').onclick = () => go(true);
-    $('syncPw').onkeydown = e => { if (e.key === 'Enter') go(false); };
-  }
-}
-const syncInfo = () => `"${Sync.auth.id}" 로 연동 중` + (Sync.lastSync ? ` · 마지막 동기화 ${new Date(Sync.lastSync).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` : '');
-Sync.onChange(renderSync);
 
 // 시간이 지정된 일정 알림 + 날짜가 바뀌면 다시 그리기
 let todayKeyCache = key(new Date());
@@ -373,7 +329,6 @@ setInterval(() => {
   const now = new Date(), k = key(now);
   const hm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   live(events).forEach(ev => {
-    // 알림 여부는 컴퓨터마다 따로 기억한다 (연동해도 두 컴퓨터 모두 알림)
     const nk = 'notified:' + ev.id;
     if (ev.time === hm && ev.start <= k && k <= ev.end && localStorage.getItem(nk) !== k) {
       localStorage.setItem(nk, k); window.api.notify('일정 알림', ev.text);
@@ -382,7 +337,7 @@ setInterval(() => {
   if (k !== todayKeyCache) { todayKeyCache = k; render(); }
 }, 15000);
 
-applyCfg(); render(); renderSync();
+applyCfg(); render();
 </script>
 </body>
 </html>

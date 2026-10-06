@@ -1,6 +1,6 @@
 {
   "name": "desktop-calendar",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "바탕화면 캘린더",
   "main": "main.js",
   "scripts": {
@@ -21,8 +21,6 @@
       "index.html",
       "memo.html",
       "common.js",
-      "sync.js",
-      "firebase-config.js",
       "icon.png",
       "tray.png"
     ],

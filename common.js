@@ -6,8 +6,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const hexRgb = h => [1,3,5].map(i => parseInt(h.slice(i, i+2), 16));
 const isLight = h => { const [r,g,b] = hexRgb(h); return (r*299 + g*587 + b*114) / 1000 > 150; };
 
-// 일정·메모는 지워도 "지움 표시(deleted)"를 남긴다. 집·회사 연동 때 지운 것이 되살아나지 않게 하기 위해서다.
-// 모든 항목은 마지막으로 바뀐 시각 u(밀리초)를 가진다.
+// 일정·메모는 지우면 "지움 표시(deleted)"를 남기고, 마지막으로 바뀐 시각 u(밀리초)를 가진다.
 const live = list => list.filter(x => !x.deleted);
 const touch = x => { x.u = Date.now(); return x; };
 

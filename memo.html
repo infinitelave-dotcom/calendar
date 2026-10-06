@@ -116,7 +116,7 @@ function remove(memo) {
 $('text').oninput = e => { const m = cur(); m.text = e.target.value; touch(m); saveMemos(); };
 $('hide').onclick = () => window.api.setMemoVisible(false);
 
-// 연동으로 다른 컴퓨터의 메모가 들어오면 다시 그리기
+// 다른 창에서 메모가 바뀌면 다시 그리기
 window.addEventListener('storage', e => {
   if (e.key === 'memos') { memos = load('memos', []); render(); }
 });
