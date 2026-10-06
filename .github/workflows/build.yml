@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: windows-latest
@@ -13,7 +15,18 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm run build
+      - name: Rename exe
+        shell: bash
+        run: mv dist/*.exe dist/DesktopCalendar.exe
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-calendar-windows
-          path: dist/*.exe
+          path: dist/DesktopCalendar.exe
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: 바탕화면 캘린더 (최신 버전)
+          body: 아래 Assets에서 DesktopCalendar.exe 를 내려받아 더블클릭하면 실행됩니다.
+          make_latest: true
+          files: dist/DesktopCalendar.exe
