@@ -4,112 +4,213 @@
 <meta charset="utf-8">
 <title>바탕화면 캘린더</title>
 <style>
-  :root { --bg: rgba(27,42,65,0.85); --fg:#F6F4EE; --accent:#F2A65A; --muted:#9FB0C8; }
+  :root {
+    --base: 27,42,65;          /* 배경색 (r,g,b) */
+    --alpha: 0.85;
+    --accent: #F2A65A;
+    --fg: #F6F4EE;
+    --muted: #9FB0C8;
+    --line: rgba(255,255,255,.12);
+  }
   * { box-sizing: border-box; }
   html, body { margin:0; height:100%; background:transparent; font-family:'Malgun Gothic','Segoe UI',sans-serif; color:var(--fg); user-select:none; }
-  #app { height:100%; background:var(--bg); border-radius:16px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
-  header { display:flex; align-items:center; gap:6px; -webkit-app-region:drag; }
-  header h1 { flex:1; margin:0; font-size:18px; text-align:center; }
-  button { -webkit-app-region:no-drag; background:rgba(255,255,255,.12); color:var(--fg); border:0; border-radius:8px; padding:4px 10px; font-size:14px; cursor:pointer; }
+  button { background:rgba(255,255,255,.12); color:var(--fg); border:0; border-radius:8px; padding:6px 12px; font-size:15px; cursor:pointer; font-family:inherit; }
   button:hover { background:rgba(255,255,255,.25); }
-  .grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
-  .dow { text-align:center; font-size:12px; color:var(--muted); padding:2px 0; }
-  .dow:first-child, .day.sun { color:#FF9B8A; }
-  .day { text-align:center; padding:6px 0 8px; border-radius:8px; cursor:pointer; font-size:14px; position:relative; }
-  .day:hover { background:rgba(255,255,255,.14); }
+  input, select { font-family:inherit; }
+
+  #app { height:100%; display:flex; gap:12px; background:rgba(var(--base),var(--alpha)); border-radius:18px; padding:16px; }
+
+  /* ── 달력 ── */
+  #cal { flex:1; min-width:0; display:flex; flex-direction:column; gap:10px; }
+  header { display:flex; align-items:center; gap:8px; -webkit-app-region:drag; }
+  header button { -webkit-app-region:no-drag; }
+  header h1 { margin:0 8px; font-size:28px; font-weight:700; }
+  header .sp { flex:1; }
+  .dows, .days { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:4px; }
+  .dow { text-align:center; font-size:15px; color:var(--muted); padding:4px 0; }
+  .dow.sun { color:#FF9B8A; } .dow.sat { color:#8FC1FF; }
+  .days { flex:1; grid-auto-rows:minmax(0,1fr); }
+  .day { border-radius:10px; padding:6px 7px; cursor:pointer; display:flex; flex-direction:column; gap:3px; overflow:hidden; background:rgba(255,255,255,.04); }
+  .day:hover { background:rgba(255,255,255,.12); }
   .day.other { opacity:.35; }
-  .day.today { background:var(--accent); color:#1B2A41; font-weight:700; }
   .day.sel { outline:2px solid var(--accent); }
-  .day .dot { position:absolute; bottom:2px; left:50%; width:5px; height:5px; margin-left:-2.5px; border-radius:50%; background:var(--accent); }
-  .day.today .dot { background:#1B2A41; }
-  #panel { flex:1; min-height:0; display:flex; flex-direction:column; gap:6px; border-top:1px solid rgba(255,255,255,.15); padding-top:8px; }
-  #panel h2 { margin:0; font-size:14px; color:var(--muted); font-weight:500; }
-  #list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
-  .ev { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,.1); border-radius:8px; padding:5px 8px; font-size:14px; }
+  .num { font-size:17px; font-weight:600; width:30px; height:30px; line-height:30px; text-align:center; border-radius:50%; flex:none; }
+  .day.sun .num { color:#FF9B8A; } .day.sat .num { color:#8FC1FF; }
+  .day.today .num { background:var(--accent); color:#1B2A41; }
+  .chip { font-size:13px; padding:2px 6px; border-radius:5px; color:#1B2A41; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:none; }
+  .more { font-size:12px; color:var(--muted); padding-left:4px; }
+
+  /* ── 오른쪽 사이드바 ── */
+  #side { width:300px; flex:none; display:flex; flex-direction:column; gap:12px; border-left:1px solid var(--line); padding-left:14px; }
+  #side h2 { margin:0; font-size:20px; }
+  #side .sub { color:var(--muted); font-size:14px; margin-top:-8px; }
+  #list { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+  .ev { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.08); border-radius:10px; padding:8px 10px; font-size:15px; border-left:5px solid; }
+  .ev .t { flex:none; color:var(--muted); font-size:13px; }
   .ev span { flex:1; word-break:break-all; }
-  .ev .t { flex:none; color:var(--accent); }
-  .ev button { padding:0 7px; }
-  form { display:flex; gap:4px; }
-  input[type=text], input[type=time] { background:rgba(255,255,255,.12); color:var(--fg); border:0; border-radius:8px; padding:6px 8px; font-size:14px; min-width:0; }
-  input[type=text] { flex:1; }
-  #settings { display:none; flex-direction:column; gap:6px; font-size:13px; background:rgba(255,255,255,.08); border-radius:8px; padding:8px; }
-  #settings label { display:flex; align-items:center; gap:8px; }
+  .ev button { padding:2px 8px; font-size:13px; }
+  .empty { color:var(--muted); font-size:14px; }
+  .card { background:rgba(255,255,255,.07); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:10px; }
+  .card label { font-size:13px; color:var(--muted); }
+  .field { background:rgba(255,255,255,.12); color:var(--fg); border:0; border-radius:8px; padding:8px 10px; font-size:15px; width:100%; }
+  .field::-webkit-calendar-picker-indicator { filter:invert(1); }
+  .swatches { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .sw { width:26px; height:26px; border-radius:50%; cursor:pointer; border:2px solid transparent; }
+  .sw.on { border-color:var(--fg); box-shadow:0 0 0 2px rgba(0,0,0,.4) inset; }
+  input[type=color] { width:30px; height:30px; padding:0; border:0; background:none; cursor:pointer; }
+  .primary { background:var(--accent); color:#1B2A41; font-weight:700; padding:9px; }
+  .primary:hover { background:var(--accent); filter:brightness(1.1); }
+
+  #side { position:relative; }
+  #settings { display:none; position:absolute; top:0; left:14px; right:0; z-index:5; background:rgb(var(--base)); border:1px solid var(--line); box-shadow:0 8px 24px rgba(0,0,0,.35); }
+  #settings.open { display:flex; }
+  #settings .row { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--fg); }
   #settings input[type=range] { flex:1; }
 </style>
 </head>
 <body>
 <div id="app">
-  <header>
-    <button id="prev">◀</button>
-    <h1 id="title"></h1>
-    <button id="next">▶</button>
-    <button id="todayBtn">오늘</button>
-    <button id="gear">⚙</button>
-  </header>
-  <div id="settings">
-    <label>투명도 <input type="range" id="opacity" min="20" max="100"></label>
-    <label><input type="checkbox" id="mon"> 월요일부터 시작</label>
-    <label><input type="checkbox" id="auto"> 컴퓨터 켤 때 자동 실행</label>
-    <button id="quit">프로그램 종료</button>
-  </div>
-  <div class="grid" id="dows"></div>
-  <div class="grid" id="days"></div>
-  <div id="panel">
+  <section id="cal">
+    <header>
+      <button id="prev">◀</button>
+      <h1 id="title"></h1>
+      <button id="next">▶</button>
+      <button id="todayBtn">오늘</button>
+      <div class="sp"></div>
+      <button id="gear">⚙ 설정</button>
+    </header>
+    <div class="dows" id="dows"></div>
+    <div class="days" id="days"></div>
+  </section>
+
+  <aside id="side">
+    <div class="card" id="settings">
+      <div class="row"><b>설정</b></div>
+      <label>배경색</label>
+      <div class="swatches" id="bgSw"></div>
+      <label>강조색</label>
+      <div class="swatches" id="acSw"></div>
+      <div class="row">투명도 <input type="range" id="opacity" min="20" max="100"></div>
+      <div class="row"><input type="checkbox" id="pin"> 바탕화면 맨 뒤로 고정</div>
+      <div class="row"><input type="checkbox" id="mon"> 월요일부터 시작</div>
+      <div class="row"><input type="checkbox" id="auto"> 컴퓨터 켤 때 자동 실행</div>
+      <button id="closeSettings" type="button">닫기</button>
+      <button id="quit">프로그램 종료</button>
+    </div>
+
     <h2 id="selLabel"></h2>
+    <div class="sub" id="selSub"></div>
     <div id="list"></div>
-    <form id="form">
-      <input type="time" id="time">
-      <input type="text" id="text" placeholder="일정 입력 후 Enter" maxlength="100">
+
+    <form class="card" id="form">
+      <label>새 일정</label>
+      <input class="field" type="text" id="text" placeholder="일정 내용" maxlength="100">
+      <input class="field" type="time" id="time" title="시간 (선택, 넣으면 알림)">
+      <label>색상</label>
+      <div class="swatches" id="evSw"></div>
+      <button class="primary" type="submit">일정 추가</button>
     </form>
-  </div>
+  </aside>
 </div>
 <script>
 const $ = id => document.getElementById(id);
 const DOW = ['일','월','화','수','목','금','토'];
+const EV_COLORS = ['#F2A65A','#FF8A80','#FFD166','#8BD3A0','#7FC8F8','#B69CFF','#F4A6D7','#D9D9D9'];
+const BG_COLORS = ['#1B2A41','#22252B','#2E3B2F','#3B2433','#1F3A4D','#F3EFE6'];
+const AC_COLORS = ['#F2A65A','#FF8A80','#FFD166','#8BD3A0','#7FC8F8','#B69CFF'];
+
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
-
-let events = load('events', {});          // { 'YYYY-MM-DD': [{text, time}] }
-let cfg = load('cfg', { opacity: 85, mon: false });
-let view = new Date(); view.setDate(1);
 const key = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+let events = load('events', {});      // { 'YYYY-MM-DD': [{id, text, time, color, notified}] }
+for (const k in events) events[k].forEach(e => { e.id ??= Math.random().toString(36).slice(2); e.color ??= EV_COLORS[0]; });
+let cfg = Object.assign({ opacity: 85, mon: false, bg: BG_COLORS[0], accent: AC_COLORS[0], evColor: EV_COLORS[0] }, load('cfg', {}));
+let view = new Date(); view.setDate(1);
 let selected = key(new Date());
 
+const hexRgb = h => [1,3,5].map(i => parseInt(h.slice(i, i+2), 16));
+const isLight = h => { const [r,g,b] = hexRgb(h); return (r*299 + g*587 + b*114) / 1000 > 150; };
+
 function applyCfg() {
-  document.documentElement.style.setProperty('--bg', `rgba(27,42,65,${cfg.opacity/100})`);
+  const s = document.documentElement.style;
+  s.setProperty('--base', hexRgb(cfg.bg).join(','));
+  s.setProperty('--alpha', cfg.opacity / 100);
+  s.setProperty('--accent', cfg.accent);
+  const light = isLight(cfg.bg);
+  s.setProperty('--fg', light ? '#1B2A41' : '#F6F4EE');
+  s.setProperty('--muted', light ? '#5A6577' : '#9FB0C8');
+  s.setProperty('--line', light ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.12)');
   $('opacity').value = cfg.opacity; $('mon').checked = cfg.mon;
+  swatches('bgSw', BG_COLORS, cfg.bg, c => { cfg.bg = c; save('cfg', cfg); applyCfg(); });
+  swatches('acSw', AC_COLORS, cfg.accent, c => { cfg.accent = c; save('cfg', cfg); applyCfg(); });
+  swatches('evSw', EV_COLORS, cfg.evColor, c => { cfg.evColor = c; save('cfg', cfg); applyCfg(); });
+}
+
+// 색상 동그라미 + 직접 고르기
+function swatches(id, list, current, onPick) {
+  const box = $(id); box.innerHTML = '';
+  list.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'sw' + (c.toLowerCase() === current.toLowerCase() ? ' on' : '');
+    d.style.background = c; d.title = c;
+    d.onclick = () => onPick(c);
+    box.append(d);
+  });
+  const custom = document.createElement('input');
+  custom.type = 'color'; custom.value = current; custom.title = '직접 고르기';
+  custom.onchange = e => onPick(e.target.value);
+  box.append(custom);
 }
 
 function render() {
   $('title').textContent = `${view.getFullYear()}년 ${view.getMonth()+1}월`;
   const order = cfg.mon ? [1,2,3,4,5,6,0] : [0,1,2,3,4,5,6];
-  $('dows').innerHTML = order.map(i => `<div class="dow" style="${i===0?'color:#FF9B8A':''}">${DOW[i]}</div>`).join('');
+  $('dows').innerHTML = order.map(i => `<div class="dow ${i===0?'sun':i===6?'sat':''}">${DOW[i]}</div>`).join('');
   const first = new Date(view.getFullYear(), view.getMonth(), 1);
   const offset = (first.getDay() - (cfg.mon ? 1 : 0) + 7) % 7;
   const start = new Date(first); start.setDate(1 - offset);
   const todayKey = key(new Date());
-  let html = '';
+  const box = $('days'); box.innerHTML = '';
   for (let i = 0; i < 42; i++) {
     const d = new Date(start); d.setDate(start.getDate() + i);
     const k = key(d);
-    const cls = ['day', d.getMonth() !== view.getMonth() && 'other', d.getDay()===0 && 'sun', k===todayKey && 'today', k===selected && 'sel'].filter(Boolean).join(' ');
-    html += `<div class="${cls}" data-k="${k}">${d.getDate()}${(events[k]||[]).length ? '<i class="dot"></i>' : ''}</div>`;
+    const cell = document.createElement('div');
+    cell.className = ['day', d.getMonth() !== view.getMonth() && 'other', d.getDay()===0 && 'sun', d.getDay()===6 && 'sat',
+                      k===todayKey && 'today', k===selected && 'sel'].filter(Boolean).join(' ');
+    cell.dataset.k = k;
+    const num = document.createElement('div'); num.className = 'num'; num.textContent = d.getDate(); cell.append(num);
+    const list = sorted(k);
+    list.slice(0, 3).forEach(ev => {
+      const c = document.createElement('div'); c.className = 'chip';
+      c.style.background = ev.color; c.style.color = isLight(ev.color) ? '#1B2A41' : '#F6F4EE';
+      c.textContent = (ev.time ? ev.time + ' ' : '') + ev.text;
+      cell.append(c);
+    });
+    if (list.length > 3) { const m = document.createElement('div'); m.className = 'more'; m.textContent = `+${list.length - 3}개 더`; cell.append(m); }
+    box.append(cell);
   }
-  $('days').innerHTML = html;
   renderList();
 }
 
+const sorted = k => (events[k] || []).slice().sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+
 function renderList() {
   const [y, m, d] = selected.split('-').map(Number);
-  $('selLabel').textContent = `${m}월 ${d}일 (${DOW[new Date(y, m-1, d).getDay()]}) 일정`;
-  const list = (events[selected] || []).slice().sort((a, b) => (a.time||'99').localeCompare(b.time||'99'));
-  $('list').innerHTML = list.length ? '' : '<div style="color:#9FB0C8;font-size:13px">일정이 없습니다</div>';
+  $('selLabel').textContent = `${m}월 ${d}일 ${DOW[new Date(y, m-1, d).getDay()]}요일`;
+  const list = sorted(selected);
+  $('selSub').textContent = list.length ? `일정 ${list.length}개` : '';
+  $('list').innerHTML = list.length ? '' : '<div class="empty">일정이 없습니다. 아래에서 추가하세요.</div>';
   list.forEach(ev => {
-    const row = document.createElement('div'); row.className = 'ev';
+    const row = document.createElement('div'); row.className = 'ev'; row.style.borderLeftColor = ev.color;
     if (ev.time) { const t = document.createElement('b'); t.className = 't'; t.textContent = ev.time; row.append(t); }
     const s = document.createElement('span'); s.textContent = ev.text; row.append(s);
-    const b = document.createElement('button'); b.textContent = '✕';
-    b.onclick = () => { events[selected] = events[selected].filter(e => e !== ev && !(e.text===ev.text && e.time===ev.time)); if (!events[selected].length) delete events[selected]; save('events', events); render(); };
+    const b = document.createElement('button'); b.textContent = '삭제';
+    b.onclick = () => {
+      events[selected] = events[selected].filter(e => e.id !== ev.id);
+      if (!events[selected].length) delete events[selected];
+      save('events', events); render();
+    };
     row.append(b); $('list').append(row);
   });
 }
@@ -119,16 +220,17 @@ $('days').addEventListener('click', e => {
   selected = el.dataset.k;
   const [y, m] = selected.split('-').map(Number);
   if (m-1 !== view.getMonth()) view = new Date(y, m-1, 1);
-  render();
+  render(); $('text').focus();
 });
 $('prev').onclick = () => { view.setMonth(view.getMonth()-1); render(); };
 $('next').onclick = () => { view.setMonth(view.getMonth()+1); render(); };
 $('todayBtn').onclick = () => { selected = key(new Date()); view = new Date(); view.setDate(1); render(); };
-$('gear').onclick = () => { const s = $('settings'); s.style.display = s.style.display === 'flex' ? 'none' : 'flex'; };
+$('gear').onclick = () => $('settings').classList.toggle('open');
+$('closeSettings').onclick = () => $('settings').classList.remove('open');
 $('form').onsubmit = e => {
   e.preventDefault();
-  const text = $('text').value.trim(); if (!text) return;
-  (events[selected] = events[selected] || []).push({ text, time: $('time').value, notified: false });
+  const text = $('text').value.trim(); if (!text) { $('text').focus(); return; }
+  (events[selected] ??= []).push({ id: Math.random().toString(36).slice(2), text, time: $('time').value, color: cfg.evColor, notified: false });
   save('events', events); $('text').value = ''; $('time').value = ''; render();
 };
 $('opacity').oninput = e => { cfg.opacity = +e.target.value; save('cfg', cfg); applyCfg(); };
@@ -136,17 +238,19 @@ $('mon').onchange = e => { cfg.mon = e.target.checked; save('cfg', cfg); render(
 $('quit').onclick = () => window.api.quit();
 window.api.getAutostart().then(v => $('auto').checked = v);
 $('auto').onchange = e => window.api.setAutostart(e.target.checked);
+window.api.getPinned().then(v => $('pin').checked = v);
+$('pin').onchange = e => window.api.setPinned(e.target.checked);
 
-// 시간이 지정된 일정 알림 (프로그램이 켜져 있을 때)
+// 시간이 지정된 일정 알림 + 날짜가 바뀌면 다시 그리기
+let todayKeyCache = key(new Date());
 setInterval(() => {
   const now = new Date(), k = key(now);
   const hm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   (events[k] || []).forEach(ev => {
     if (ev.time === hm && !ev.notified) { ev.notified = true; save('events', events); window.api.notify('일정 알림', ev.text); }
   });
-  if (key(new Date()) !== todayKeyCache) { todayKeyCache = key(new Date()); render(); }
+  if (k !== todayKeyCache) { todayKeyCache = k; render(); }
 }, 15000);
-let todayKeyCache = key(new Date());
 
 applyCfg(); render();
 </script>

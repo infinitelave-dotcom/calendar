@@ -15,6 +15,9 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm run build
+      - name: Check koffi is packaged
+        shell: bash
+        run: npx --yes @electron/asar list dist/win-unpacked/resources/app.asar | grep -q koffi || ls dist/win-unpacked/resources/app.asar.unpacked/node_modules/koffi
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-calendar-windows
