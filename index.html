@@ -78,6 +78,31 @@
   .primary:hover { background:var(--accent); filter:brightness(1.1); }
   .hint { font-size:12px; color:var(--muted); }
 
+  /* 일정 / 메모 전환 */
+  .seg { display:flex; background:var(--softer); border-radius:10px; padding:3px; gap:3px; flex:none; }
+  .seg button { flex:1; padding:6px; background:transparent; font-weight:600; }
+  .seg button.on { background:var(--accent); color:#1B2A41; text-shadow:none; }
+  .view { display:none; flex:1; min-height:0; flex-direction:column; gap:12px; }
+  .view.on { display:flex; }
+
+  /* 일정 이름 수정 */
+  .ev .txt { cursor:text; }
+  .ev input.edit { width:100%; background:var(--soft); color:var(--fg); border:1px solid var(--accent); border-radius:6px; padding:3px 6px; font-size:15px; font-family:inherit; }
+
+  /* 스티커 메모 */
+  .memo-colors { display:flex; gap:6px; align-items:center; flex:none; }
+  .memo-colors .sw { width:22px; height:22px; }
+  .sticky { flex:1; min-height:0; resize:none; border:0; border-radius:4px 4px 12px 0; padding:16px; font-size:16px; line-height:1.55;
+            color:#3A3220; font-family:inherit; text-shadow:none; box-shadow:0 6px 18px rgba(0,0,0,.28); outline:none;
+            background-image:linear-gradient(rgba(0,0,0,.06), rgba(0,0,0,0) 28px); user-select:text; }
+  .sticky::placeholder { color:rgba(58,50,32,.45); }
+  .sheets { display:flex; align-items:flex-end; gap:2px; overflow-x:auto; flex:none; margin-top:-12px; padding-bottom:2px; }
+  .sheet { min-width:34px; height:28px; padding:0 12px; border-radius:0 0 8px 8px; background:var(--soft); color:var(--fg);
+           font-size:13px; line-height:28px; cursor:pointer; white-space:nowrap; flex:none; opacity:.75; }
+  .sheet.on { opacity:1; color:#3A3220; text-shadow:none; font-weight:600; height:32px; line-height:32px; }
+  .sheet input { width:90px; border:0; background:rgba(255,255,255,.7); color:#3A3220; font-size:13px; font-family:inherit; border-radius:4px; padding:2px 4px; }
+  .sheet-add { flex:none; height:28px; padding:0 10px; border-radius:0 0 8px 8px; font-size:16px; }
+
   #settings { display:none; position:absolute; top:0; left:14px; right:0; z-index:5; max-height:100%; overflow-y:auto;
               background:rgb(var(--base)); border:1px solid var(--line); box-shadow:0 8px 24px rgba(0,0,0,.35); }
   #settings.open { display:flex; }
@@ -122,6 +147,12 @@
       <button id="quit" type="button">프로그램 종료</button>
     </div>
 
+    <div class="seg" id="seg">
+      <button type="button" data-v="eventsView">일정</button>
+      <button type="button" data-v="memoView">메모</button>
+    </div>
+
+    <div class="view" id="eventsView">
     <h2 id="selLabel"></h2>
     <div class="sub" id="selSub"></div>
     <div id="list"></div>
@@ -140,6 +171,13 @@
       <div class="swatches" id="evSw"></div>
       <button class="primary" type="submit">일정 추가</button>
     </form>
+    </div>
+
+    <div class="view" id="memoView">
+      <div class="memo-colors" id="memoSw"></div>
+      <textarea class="sticky" id="memoText" placeholder="여기에 메모를 적으세요"></textarea>
+      <div class="sheets" id="sheets"></div>
+    </div>
   </aside>
 </div>
 <script>
@@ -279,12 +317,34 @@ function renderSide() {
     const info = document.createElement('div'); info.className = 'info';
     const meta = [ev.start !== ev.end ? `${fmt(ev.start)} ~ ${fmt(ev.end)}` : (a !== b ? fmt(ev.start) : ''), ev.time].filter(Boolean).join(' · ');
     if (meta) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = meta; info.append(m); }
-    const t = document.createElement('div'); t.className = 'txt'; t.textContent = ev.text; info.append(t);
+    const t = document.createElement('div'); t.className = 'txt'; t.textContent = ev.text; t.title = '더블클릭해서 이름 수정';
+    t.ondblclick = () => editEvent(ev, t);
+    info.append(t);
     row.append(info);
+    const ed = document.createElement('button'); ed.textContent = '수정';
+    ed.onclick = () => editEvent(ev, t);
+    row.append(ed);
     const del = document.createElement('button'); del.textContent = '삭제';
     del.onclick = () => { events = events.filter(e => e.id !== ev.id); saveEvents(); render(); };
     row.append(del); $('list').append(row);
   });
+}
+
+// 일정 이름 고치기: 글자 자리에 입력칸을 띄우고 Enter/바깥 클릭이면 저장, Esc면 취소
+function editEvent(ev, el) {
+  if (el.querySelector('input')) return;
+  const inp = document.createElement('input');
+  inp.className = 'edit'; inp.value = ev.text; inp.maxLength = 100;
+  el.textContent = ''; el.append(inp); inp.focus(); inp.select();
+  let done = false;
+  const finish = (ok) => {
+    if (done) return; done = true;
+    const v = inp.value.trim();
+    if (ok && v) { ev.text = v; saveEvents(); }
+    render();
+  };
+  inp.onkeydown = e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
+  inp.onblur = () => finish(true);
 }
 
 // 날짜 클릭 / 끌어서 여러 날 선택
@@ -358,7 +418,76 @@ setInterval(() => {
   if (k !== todayKeyCache) { todayKeyCache = k; render(); }
 }, 15000);
 
-applyCfg(); render();
+// ── 일정 / 메모 화면 전환 ──
+function showView(v) {
+  cfg.view = v; save('cfg', cfg);
+  document.querySelectorAll('.view').forEach(el => el.classList.toggle('on', el.id === v));
+  document.querySelectorAll('#seg button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+}
+document.querySelectorAll('#seg button').forEach(b => b.onclick = () => showView(b.dataset.v));
+
+// ── 스티커 메모 (엑셀 시트처럼 탭으로 여러 장) ──
+const MEMO_COLORS = ['#FFE88A','#FFC1CC','#BDE8C0','#B9DDF7','#E1CFFF','#FFD3A8','#F4F1EA'];
+let memos = load('memos', null) || [{ id: uid(), title: '', text: '', color: MEMO_COLORS[0] }];
+let activeMemo = load('activeMemo', memos[0].id);
+if (!memos.some(m => m.id === activeMemo)) activeMemo = memos[0].id;
+const saveMemos = () => { save('memos', memos); save('activeMemo', activeMemo); };
+const curMemo = () => memos.find(m => m.id === activeMemo);
+
+function renderMemo() {
+  const m = curMemo();
+  const ta = $('memoText');
+  if (ta.value !== m.text) ta.value = m.text;
+  ta.style.background = m.color;
+  swatches('memoSw', MEMO_COLORS, m.color, c => { m.color = c; saveMemos(); renderMemo(); });
+  const bar = $('sheets'); bar.innerHTML = '';
+  memos.forEach(memo => {
+    const tab = document.createElement('div');
+    tab.className = 'sheet' + (memo.id === activeMemo ? ' on' : '');
+    if (memo.id === activeMemo) tab.style.background = memo.color;
+    tab.textContent = memo.title;            // 제목이 없으면 빈 탭
+    tab.title = '더블클릭: 제목 넣기 · 오른쪽 클릭: 삭제';
+    tab.onclick = () => { if (activeMemo !== memo.id) { activeMemo = memo.id; saveMemos(); renderMemo(); } };
+    tab.ondblclick = () => editSheetTitle(memo, tab);
+    tab.oncontextmenu = e => { e.preventDefault(); deleteMemo(memo); };
+    bar.append(tab);
+  });
+  const add = document.createElement('button');
+  add.className = 'sheet-add'; add.textContent = '+'; add.title = '새 메모';
+  add.onclick = () => {
+    const memo = { id: uid(), title: '', text: '', color: MEMO_COLORS[memos.length % MEMO_COLORS.length] };
+    memos.push(memo); activeMemo = memo.id; saveMemos(); renderMemo(); $('memoText').focus();
+  };
+  bar.append(add);
+}
+
+function editSheetTitle(memo, tab) {
+  if (tab.querySelector('input')) return;
+  const inp = document.createElement('input');
+  inp.value = memo.title; inp.maxLength = 30; inp.placeholder = '제목';
+  tab.textContent = ''; tab.append(inp); inp.focus(); inp.select();
+  let done = false;
+  const finish = (ok) => {
+    if (done) return; done = true;
+    if (ok) { memo.title = inp.value.trim(); saveMemos(); }
+    renderMemo();
+  };
+  inp.onkeydown = e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
+  inp.onblur = () => finish(true);
+}
+
+function deleteMemo(memo) {
+  if (memos.length === 1) { if (confirm('메모 내용을 모두 지울까요?')) { memo.text = ''; memo.title = ''; saveMemos(); renderMemo(); } return; }
+  if (!confirm(`${memo.title ? `"${memo.title}"` : '이'} 메모를 삭제할까요?`)) return;
+  const i = memos.indexOf(memo);
+  memos.splice(i, 1);
+  if (activeMemo === memo.id) activeMemo = memos[Math.max(0, i - 1)].id;
+  saveMemos(); renderMemo();
+}
+
+$('memoText').oninput = e => { curMemo().text = e.target.value; saveMemos(); };
+
+applyCfg(); render(); renderMemo(); showView(cfg.view || 'eventsView');
 </script>
 </body>
 </html>
