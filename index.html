@@ -29,12 +29,12 @@
   #cal { flex:1; min-width:0; display:flex; flex-direction:column; gap:10px; }
   header { display:flex; align-items:center; gap:8px; -webkit-app-region:drag; }
   body.locked header { -webkit-app-region:no-drag; }
-  header button { -webkit-app-region:no-drag; }
-  header h1 { margin:0 8px; font-size:28px; font-weight:700; }
+  header button { -webkit-app-region:no-drag; white-space:nowrap; flex:none; }
+  header h1 { margin:0 8px; font-size:28px; font-weight:700; white-space:nowrap; }
   header .sp { flex:1; }
-  .icon-btn { display:flex; align-items:center; gap:6px; }
+  .icon-btn { display:flex; align-items:center; gap:6px; white-space:nowrap; }
   .icon-btn svg { width:18px; height:18px; }
-  #lockBtn.on { background:var(--accent); color:#1B2A41; text-shadow:none; }
+  .icon-btn.on { background:var(--accent); color:#1B2A41; text-shadow:none; }
   .dows, .days { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:4px; }
   .dow { text-align:center; font-size:16px; font-weight:700; padding:4px 0; }
   .dow.sun { color:var(--sun); } .dow.sat { color:var(--sat); }
@@ -60,8 +60,9 @@
   .ev { display:flex; align-items:center; gap:8px; background:var(--soft); border-radius:10px; padding:8px 10px; font-size:15px; border-left:5px solid; }
   .ev .info { flex:1; display:flex; flex-direction:column; gap:2px; min-width:0; }
   .ev .meta { color:var(--muted); font-size:12px; }
-  .ev .txt { word-break:break-all; }
+  .ev .txt { word-break:break-all; cursor:text; }
   .ev button { padding:2px 8px; font-size:13px; }
+  input.edit { width:100%; background:var(--soft); color:var(--fg); border:1px solid var(--accent); border-radius:6px; padding:3px 6px; font-size:15px; font-family:inherit; }
   .empty { color:var(--muted); font-size:14px; }
   .card { background:var(--softer); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:10px; }
   .card label { font-size:13px; color:var(--muted); }
@@ -78,36 +79,16 @@
   .primary:hover { background:var(--accent); filter:brightness(1.1); }
   .hint { font-size:12px; color:var(--muted); }
 
-  /* 일정 / 메모 전환 */
-  .seg { display:flex; background:var(--softer); border-radius:10px; padding:3px; gap:3px; flex:none; }
-  .seg button { flex:1; padding:6px; background:transparent; font-weight:600; }
-  .seg button.on { background:var(--accent); color:#1B2A41; text-shadow:none; }
-  .view { display:none; flex:1; min-height:0; flex-direction:column; gap:12px; }
-  .view.on { display:flex; }
-
-  /* 일정 이름 수정 */
-  .ev .txt { cursor:text; }
-  .ev input.edit { width:100%; background:var(--soft); color:var(--fg); border:1px solid var(--accent); border-radius:6px; padding:3px 6px; font-size:15px; font-family:inherit; }
-
-  /* 스티커 메모 */
-  .memo-colors { display:flex; gap:6px; align-items:center; flex:none; }
-  .memo-colors .sw { width:22px; height:22px; }
-  .sticky { flex:1; min-height:0; resize:none; border:0; border-radius:4px 4px 12px 0; padding:16px; font-size:16px; line-height:1.55;
-            color:#3A3220; font-family:inherit; text-shadow:none; box-shadow:0 6px 18px rgba(0,0,0,.28); outline:none;
-            background-image:linear-gradient(rgba(0,0,0,.06), rgba(0,0,0,0) 28px); user-select:text; }
-  .sticky::placeholder { color:rgba(58,50,32,.45); }
-  .sheets { display:flex; align-items:flex-end; gap:2px; overflow-x:auto; flex:none; margin-top:-12px; padding-bottom:2px; }
-  .sheet { min-width:34px; height:28px; padding:0 12px; border-radius:0 0 8px 8px; background:var(--soft); color:var(--fg);
-           font-size:13px; line-height:28px; cursor:pointer; white-space:nowrap; flex:none; opacity:.75; }
-  .sheet.on { opacity:1; color:#3A3220; text-shadow:none; font-weight:600; height:32px; line-height:32px; }
-  .sheet input { width:90px; border:0; background:rgba(255,255,255,.7); color:#3A3220; font-size:13px; font-family:inherit; border-radius:4px; padding:2px 4px; }
-  .sheet-add { flex:none; height:28px; padding:0 10px; border-radius:0 0 8px 8px; font-size:16px; }
-
   #settings { display:none; position:absolute; top:0; left:14px; right:0; z-index:5; max-height:100%; overflow-y:auto;
               background:rgb(var(--base)); border:1px solid var(--line); box-shadow:0 8px 24px rgba(0,0,0,.35); }
   #settings.open { display:flex; }
+  #settings > * { flex:none; }
+  #syncBox { display:flex; flex-direction:column; gap:8px; }
   #settings .row { display:flex; align-items:center; gap:8px; font-size:14px; }
   #settings input[type=range] { flex:1; }
+  #settings hr { width:100%; border:0; border-top:1px solid var(--line); margin:2px 0; }
+  .btns { display:flex; gap:6px; } .btns button { flex:1; }
+  .status { font-size:13px; color:var(--accent); min-height:0; }
 </style>
 </head>
 <body>
@@ -119,10 +100,12 @@
       <button id="next">▶</button>
       <button id="todayBtn">오늘</button>
       <div class="sp"></div>
+      <button id="memoBtn" class="icon-btn" title="메모 창 보이기/숨기기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11l-5 5H4z"/><path d="M15 20v-5h5"/></svg>메모
+      </button>
       <button id="lockBtn" class="icon-btn" title="창 위치·크기 잠금"></button>
       <button id="pinBtn" class="icon-btn" title="바탕화면 아이콘 뒤로 고정 (Ctrl+Alt+C)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76V6h6v4.76l2.5 3.24h-11z"/><path d="M8 3h8"/></svg>
-        바탕화면에 고정
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76V6h6v4.76l2.5 3.24h-11z"/><path d="M8 3h8"/></svg>고정
       </button>
       <button id="gear">⚙ 설정</button>
     </header>
@@ -143,16 +126,20 @@
       <div class="row">투명도 <input type="range" id="opacity" min="10" max="100"></div>
       <div class="row"><input type="checkbox" id="mon"> 월요일부터 시작</div>
       <div class="row"><input type="checkbox" id="auto"> 컴퓨터 켤 때 자동 실행</div>
+
+      <hr>
+      <div class="row"><b>집·회사 연동</b></div>
+      <div id="syncBox"></div>
+      <div class="status" id="syncStatus"></div>
+
+      <hr>
+      <div class="row" id="versionRow"></div>
+      <button id="updateBtn" type="button">업데이트 확인</button>
+      <hr>
       <button id="closeSettings" type="button">닫기</button>
       <button id="quit" type="button">프로그램 종료</button>
     </div>
 
-    <div class="seg" id="seg">
-      <button type="button" data-v="eventsView">일정</button>
-      <button type="button" data-v="memoView">메모</button>
-    </div>
-
-    <div class="view" id="eventsView">
     <h2 id="selLabel"></h2>
     <div class="sub" id="selSub"></div>
     <div id="list"></div>
@@ -171,62 +158,38 @@
       <div class="swatches" id="evSw"></div>
       <button class="primary" type="submit">일정 추가</button>
     </form>
-    </div>
-
-    <div class="view" id="memoView">
-      <div class="memo-colors" id="memoSw"></div>
-      <textarea class="sticky" id="memoText" placeholder="여기에 메모를 적으세요"></textarea>
-      <div class="sheets" id="sheets"></div>
-    </div>
   </aside>
 </div>
+<script src="common.js"></script>
+<script src="firebase-config.js"></script>
+<script src="sync.js"></script>
 <script>
-const $ = id => document.getElementById(id);
 const DOW = ['일','월','화','수','목','금','토'];
 const EV_COLORS = ['#F2A65A','#FF8A80','#FFD166','#8BD3A0','#7FC8F8','#B69CFF','#F4A6D7','#D9D9D9'];
-const BG_COLORS = ['#1B2A41','#22252B','#2E3B2F','#3B2433','#1F3A4D','#F3EFE6','#FFFFFF'];
 const FG_COLORS = ['#FFFFFF','#F6F4EE','#FFE8A3','#1B2A41','#000000'];
-const AC_COLORS = ['#F2A65A','#FF8A80','#FFD166','#8BD3A0','#7FC8F8','#B69CFF'];
 const LOCK_ON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>잠김';
 const LOCK_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>잠금';
 
-const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
-const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 const key = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const parse = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m-1, d); };
-const uid = () => Math.random().toString(36).slice(2);
 
-// 일정: [{id, text, start, end, time, color, notified}]  (start/end = 'YYYY-MM-DD')
+// 일정: [{id, text, start, end, time, color, notified, u, deleted}]  (start/end = 'YYYY-MM-DD')
 let events = load('events2', null);
 if (!events) {   // 예전 형식(날짜별 목록)에서 옮기기
   events = [];
   const old = load('events', {});
-  for (const k in old) old[k].forEach(e => events.push({ id: e.id || uid(), text: e.text, start: k, end: k, time: e.time || '', color: e.color || EV_COLORS[0] }));
+  for (const k in old) old[k].forEach(e => events.push({ id: e.id || uid(), text: e.text, start: k, end: k, time: e.time || '', color: e.color || EV_COLORS[0], u: 0 }));
   save('events2', events);
 }
-const saveEvents = () => save('events2', events);
+const saveEvents = () => { save('events2', events); Sync.schedulePush(); };
+Sync.onLocalChanged = () => { events = load('events2', []); render(); };
 
-let cfg = Object.assign({ opacity: 85, mon: false, bg: BG_COLORS[0], fg: 'auto', shadow: true, accent: AC_COLORS[0], evColor: EV_COLORS[0] }, load('cfg', {}));
+let cfg = loadCfg();
 let view = new Date(); view.setDate(1);
 let selStart = key(new Date()), selEnd = selStart;
 
-const hexRgb = h => [1,3,5].map(i => parseInt(h.slice(i, i+2), 16));
-const isLight = h => { const [r,g,b] = hexRgb(h); return (r*299 + g*587 + b*114) / 1000 > 150; };
-
 function applyCfg() {
-  const s = document.documentElement.style;
-    // 자동: 배경이 밝고 충분히 불투명할 때만 어두운 글자, 그 외(어두운 배경, 많이 비칠 때)는 밝은 글자
-  const fg = cfg.fg === 'auto' ? (isLight(cfg.bg) && cfg.opacity >= 60 ? '#1B2A41' : '#F6F4EE') : cfg.fg;
-  const lightText = isLight(fg);
-  s.setProperty('--base', hexRgb(cfg.bg).join(','));
-  s.setProperty('--alpha', cfg.opacity / 100);
-  s.setProperty('--accent', cfg.accent);
-  s.setProperty('--fg', fg);
-  s.setProperty('--sun', lightText ? '#FF9B8A' : '#C62828');
-  s.setProperty('--sat', lightText ? '#8FC1FF' : '#1E5BB8');
-  s.setProperty('--ts', !cfg.shadow ? 'none' : lightText
-    ? '0 0 3px rgba(0,0,0,.95), 0 1px 2px rgba(0,0,0,.9)'
-    : '0 0 3px rgba(255,255,255,.95), 0 1px 2px rgba(255,255,255,.9)');
+  applyTheme(cfg);
   $('opacity').value = cfg.opacity; $('mon').checked = cfg.mon; $('shadow').checked = cfg.shadow;
   const set = (k) => (c) => { cfg[k] = c; save('cfg', cfg); applyCfg(); };
   swatches('bgSw', BG_COLORS, cfg.bg, set('bg'));
@@ -235,29 +198,8 @@ function applyCfg() {
   swatches('evSw', EV_COLORS, cfg.evColor, set('evColor'));
 }
 
-// 색상 동그라미 + 직접 고르기 (+ 자동)
-function swatches(id, list, current, onPick, withAuto) {
-  const box = $(id); box.innerHTML = '';
-  if (withAuto) {
-    const a = document.createElement('div');
-    a.className = 'sw sw-auto' + (current === 'auto' ? ' on' : ''); a.textContent = '자동';
-    a.onclick = () => onPick('auto'); box.append(a);
-  }
-  list.forEach(c => {
-    const d = document.createElement('div');
-    d.className = 'sw' + (c.toLowerCase() === String(current).toLowerCase() ? ' on' : '');
-    d.style.background = c; d.title = c;
-    d.onclick = () => onPick(c);
-    box.append(d);
-  });
-  const custom = document.createElement('input');
-  custom.type = 'color'; custom.value = current === 'auto' ? '#ffffff' : current; custom.title = '직접 고르기';
-  custom.onchange = e => onPick(e.target.value);
-  box.append(custom);
-}
-
 // 그 날짜에 걸친 일정 (여러 날 일정을 먼저, 그다음 시간순)
-const eventsOn = k => events.filter(e => e.start <= k && k <= e.end)
+const eventsOn = k => live(events).filter(e => e.start <= k && k <= e.end)
   .sort((a, b) => ((b.start !== b.end) - (a.start !== a.end)) || a.start.localeCompare(b.start)
                   || (a.time || '99').localeCompare(b.time || '99') || a.id.localeCompare(b.id));
 const range = () => selStart <= selEnd ? [selStart, selEnd] : [selEnd, selStart];
@@ -302,13 +244,9 @@ const days = (a, b) => Math.round((parse(b) - parse(a)) / 86400000) + 1;
 
 function renderSide() {
   const [a, b] = range();
-  if (a === b) {
-    $('selLabel').textContent = `${fmt(a)} ${DOW[parse(a).getDay()]}요일`;
-  } else {
-    $('selLabel').textContent = `${fmt(a)} ~ ${fmt(b)} (${days(a, b)}일)`;
-  }
+  $('selLabel').textContent = a === b ? `${fmt(a)} ${DOW[parse(a).getDay()]}요일` : `${fmt(a)} ~ ${fmt(b)} (${days(a, b)}일)`;
   $('startDate').value = a; $('endDate').value = b;
-  const list = events.filter(e => e.start <= b && a <= e.end)
+  const list = live(events).filter(e => e.start <= b && a <= e.end)
     .sort((x, y) => x.start.localeCompare(y.start) || (x.time || '99').localeCompare(y.time || '99'));
   $('selSub').textContent = list.length ? `일정 ${list.length}개` : '';
   $('list').innerHTML = list.length ? '' : '<div class="empty">일정이 없습니다. 아래에서 추가하세요.</div>';
@@ -318,33 +256,14 @@ function renderSide() {
     const meta = [ev.start !== ev.end ? `${fmt(ev.start)} ~ ${fmt(ev.end)}` : (a !== b ? fmt(ev.start) : ''), ev.time].filter(Boolean).join(' · ');
     if (meta) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = meta; info.append(m); }
     const t = document.createElement('div'); t.className = 'txt'; t.textContent = ev.text; t.title = '더블클릭해서 이름 수정';
-    t.ondblclick = () => editEvent(ev, t);
-    info.append(t);
-    row.append(info);
-    const ed = document.createElement('button'); ed.textContent = '수정';
-    ed.onclick = () => editEvent(ev, t);
-    row.append(ed);
+    const edit = () => inlineEdit(t, ev.text, { onDone: v => { if (v) { ev.text = v; touch(ev); saveEvents(); } render(); } });
+    t.ondblclick = edit;
+    info.append(t); row.append(info);
+    const ed = document.createElement('button'); ed.textContent = '수정'; ed.onclick = edit; row.append(ed);
     const del = document.createElement('button'); del.textContent = '삭제';
-    del.onclick = () => { events = events.filter(e => e.id !== ev.id); saveEvents(); render(); };
+    del.onclick = () => { ev.deleted = true; touch(ev); saveEvents(); render(); };
     row.append(del); $('list').append(row);
   });
-}
-
-// 일정 이름 고치기: 글자 자리에 입력칸을 띄우고 Enter/바깥 클릭이면 저장, Esc면 취소
-function editEvent(ev, el) {
-  if (el.querySelector('input')) return;
-  const inp = document.createElement('input');
-  inp.className = 'edit'; inp.value = ev.text; inp.maxLength = 100;
-  el.textContent = ''; el.append(inp); inp.focus(); inp.select();
-  let done = false;
-  const finish = (ok) => {
-    if (done) return; done = true;
-    const v = inp.value.trim();
-    if (ok && v) { ev.text = v; saveEvents(); }
-    render();
-  };
-  inp.onkeydown = e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
-  inp.onblur = () => finish(true);
 }
 
 // 날짜 클릭 / 끌어서 여러 날 선택
@@ -383,7 +302,7 @@ $('form').onsubmit = e => {
   const text = $('text').value.trim(); if (!text) { $('text').focus(); return; }
   let a = $('startDate').value || selStart, b = $('endDate').value || a;
   if (b < a) [a, b] = [b, a];
-  events.push({ id: uid(), text, start: a, end: b, time: $('time').value, color: cfg.evColor });
+  events.push(touch({ id: uid(), text, start: a, end: b, time: $('time').value, color: cfg.evColor }));
   saveEvents(); $('text').value = ''; $('time').value = ''; render();
 };
 $('opacity').oninput = e => { cfg.opacity = +e.target.value; save('cfg', cfg); applyCfg(); };
@@ -392,102 +311,78 @@ $('shadow').onchange = e => { cfg.shadow = e.target.checked; save('cfg', cfg); a
 $('quit').onclick = () => window.api.quit();
 window.api.getAutostart().then(v => $('auto').checked = v);
 $('auto').onchange = e => window.api.setAutostart(e.target.checked);
+$('updateBtn').onclick = () => window.api.checkUpdate();
 
-// 잠금 / 바탕화면 고정
-let locked = false;
-function showLock() {
+// 잠금 / 바탕화면 고정 / 메모 창
+let locked = false, memoVisible = true;
+function showButtons() {
   $('lockBtn').innerHTML = locked ? LOCK_ON : LOCK_OFF;
   $('lockBtn').classList.toggle('on', locked);
+  $('memoBtn').classList.toggle('on', memoVisible);
   document.body.classList.toggle('locked', locked);
 }
-$('lockBtn').onclick = () => { locked = !locked; showLock(); window.api.setLocked(locked); };
+$('lockBtn').onclick = () => { locked = !locked; showButtons(); window.api.setLocked(locked); };
+$('memoBtn').onclick = () => { memoVisible = !memoVisible; showButtons(); window.api.setMemoVisible(memoVisible); };
 $('pinBtn').onclick = () => { $('settings').classList.remove('open'); window.api.desktopMode(); };
-window.api.onState(s => { locked = s.locked; showLock(); });
-showLock();
+window.api.onState(s => {
+  locked = s.locked; memoVisible = s.memoVisible; showButtons();
+  if (s.version) $('versionRow').textContent = `현재 버전 ${s.version}`;
+  if (s.mode === 'edit') Sync.syncNow();
+});
+showButtons();
+
+// ── 연동 화면 ──
+function renderSync() {
+  const box = $('syncBox');
+  $('syncStatus').textContent = Sync.status;
+  if (!Sync.configured) {
+    box.innerHTML = '<div class="hint">연동 서버(Firebase)가 아직 설정되지 않았습니다. 설정 방법은 README 를 참고하세요.</div>';
+    return;
+  }
+  if (Sync.auth) {
+    if (box.dataset.state === 'in') { $('syncInfo').textContent = syncInfo(); return; }
+    box.dataset.state = 'in';
+    box.innerHTML = `<div class="hint" id="syncInfo"></div>
+      <div class="btns"><button type="button" id="syncNow">지금 동기화</button><button type="button" id="syncOut">로그아웃</button></div>`;
+    $('syncInfo').textContent = syncInfo();
+    $('syncNow').onclick = () => Sync.syncNow();
+    $('syncOut').onclick = () => { if (confirm('로그아웃할까요? 이 컴퓨터의 일정과 메모는 그대로 남습니다.')) Sync.logout(); };
+  } else {
+    if (box.dataset.state === 'out') return;
+    box.dataset.state = 'out';
+    box.innerHTML = `<input class="field" id="syncId" placeholder="아이디 (영문·숫자)" maxlength="30">
+      <input class="field" id="syncPw" type="password" placeholder="비밀번호 (6자 이상)">
+      <div class="btns"><button type="button" id="syncIn" class="primary">로그인</button><button type="button" id="syncNew">새로 가입</button></div>
+      <div class="hint">집과 회사에서 같은 아이디로 로그인하면 일정과 메모가 함께 보입니다. 처음 한 번은 "새로 가입"을 누르세요.</div>`;
+    const go = async (isNew) => {
+      const id = $('syncId').value, pw = $('syncPw').value;
+      if (!id || !pw) { $('syncStatus').textContent = '아이디와 비밀번호를 입력하세요.'; return; }
+      if (await Sync.login(id, pw, isNew)) { events = load('events2', []); render(); }
+    };
+    $('syncIn').onclick = () => go(false);
+    $('syncNew').onclick = () => go(true);
+    $('syncPw').onkeydown = e => { if (e.key === 'Enter') go(false); };
+  }
+}
+const syncInfo = () => `"${Sync.auth.id}" 로 연동 중` + (Sync.lastSync ? ` · 마지막 동기화 ${new Date(Sync.lastSync).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` : '');
+Sync.onChange(renderSync);
 
 // 시간이 지정된 일정 알림 + 날짜가 바뀌면 다시 그리기
 let todayKeyCache = key(new Date());
 setInterval(() => {
   const now = new Date(), k = key(now);
   const hm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  events.forEach(ev => {
-    if (ev.time === hm && ev.start <= k && k <= ev.end && ev.notified !== k) {
-      ev.notified = k; saveEvents(); window.api.notify('일정 알림', ev.text);
+  live(events).forEach(ev => {
+    // 알림 여부는 컴퓨터마다 따로 기억한다 (연동해도 두 컴퓨터 모두 알림)
+    const nk = 'notified:' + ev.id;
+    if (ev.time === hm && ev.start <= k && k <= ev.end && localStorage.getItem(nk) !== k) {
+      localStorage.setItem(nk, k); window.api.notify('일정 알림', ev.text);
     }
   });
   if (k !== todayKeyCache) { todayKeyCache = k; render(); }
 }, 15000);
 
-// ── 일정 / 메모 화면 전환 ──
-function showView(v) {
-  cfg.view = v; save('cfg', cfg);
-  document.querySelectorAll('.view').forEach(el => el.classList.toggle('on', el.id === v));
-  document.querySelectorAll('#seg button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-}
-document.querySelectorAll('#seg button').forEach(b => b.onclick = () => showView(b.dataset.v));
-
-// ── 스티커 메모 (엑셀 시트처럼 탭으로 여러 장) ──
-const MEMO_COLORS = ['#FFE88A','#FFC1CC','#BDE8C0','#B9DDF7','#E1CFFF','#FFD3A8','#F4F1EA'];
-let memos = load('memos', null) || [{ id: uid(), title: '', text: '', color: MEMO_COLORS[0] }];
-let activeMemo = load('activeMemo', memos[0].id);
-if (!memos.some(m => m.id === activeMemo)) activeMemo = memos[0].id;
-const saveMemos = () => { save('memos', memos); save('activeMemo', activeMemo); };
-const curMemo = () => memos.find(m => m.id === activeMemo);
-
-function renderMemo() {
-  const m = curMemo();
-  const ta = $('memoText');
-  if (ta.value !== m.text) ta.value = m.text;
-  ta.style.background = m.color;
-  swatches('memoSw', MEMO_COLORS, m.color, c => { m.color = c; saveMemos(); renderMemo(); });
-  const bar = $('sheets'); bar.innerHTML = '';
-  memos.forEach(memo => {
-    const tab = document.createElement('div');
-    tab.className = 'sheet' + (memo.id === activeMemo ? ' on' : '');
-    if (memo.id === activeMemo) tab.style.background = memo.color;
-    tab.textContent = memo.title;            // 제목이 없으면 빈 탭
-    tab.title = '더블클릭: 제목 넣기 · 오른쪽 클릭: 삭제';
-    tab.onclick = () => { if (activeMemo !== memo.id) { activeMemo = memo.id; saveMemos(); renderMemo(); } };
-    tab.ondblclick = () => editSheetTitle(memo, tab);
-    tab.oncontextmenu = e => { e.preventDefault(); deleteMemo(memo); };
-    bar.append(tab);
-  });
-  const add = document.createElement('button');
-  add.className = 'sheet-add'; add.textContent = '+'; add.title = '새 메모';
-  add.onclick = () => {
-    const memo = { id: uid(), title: '', text: '', color: MEMO_COLORS[memos.length % MEMO_COLORS.length] };
-    memos.push(memo); activeMemo = memo.id; saveMemos(); renderMemo(); $('memoText').focus();
-  };
-  bar.append(add);
-}
-
-function editSheetTitle(memo, tab) {
-  if (tab.querySelector('input')) return;
-  const inp = document.createElement('input');
-  inp.value = memo.title; inp.maxLength = 30; inp.placeholder = '제목';
-  tab.textContent = ''; tab.append(inp); inp.focus(); inp.select();
-  let done = false;
-  const finish = (ok) => {
-    if (done) return; done = true;
-    if (ok) { memo.title = inp.value.trim(); saveMemos(); }
-    renderMemo();
-  };
-  inp.onkeydown = e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
-  inp.onblur = () => finish(true);
-}
-
-function deleteMemo(memo) {
-  if (memos.length === 1) { if (confirm('메모 내용을 모두 지울까요?')) { memo.text = ''; memo.title = ''; saveMemos(); renderMemo(); } return; }
-  if (!confirm(`${memo.title ? `"${memo.title}"` : '이'} 메모를 삭제할까요?`)) return;
-  const i = memos.indexOf(memo);
-  memos.splice(i, 1);
-  if (activeMemo === memo.id) activeMemo = memos[Math.max(0, i - 1)].id;
-  saveMemos(); renderMemo();
-}
-
-$('memoText').oninput = e => { curMemo().text = e.target.value; saveMemos(); };
-
-applyCfg(); render(); renderMemo(); showView(cfg.view || 'eventsView');
+applyCfg(); render(); renderSync();
 </script>
 </body>
 </html>

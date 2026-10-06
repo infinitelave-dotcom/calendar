@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, globalShortcut, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, globalShortcut, nativeImage, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -13,17 +13,16 @@ function saveState() {
 
 // ── 윈도우 API: 창을 바탕화면 아이콘(폴더) 뒤에 붙이기 ─────────────────
 // 바탕화면 아이콘 뒤에는 배경화면을 그리는 "WorkerW" 창이 있다.
-// 캘린더 창을 그 창의 자식으로 넣으면 아이콘 뒤, 배경화면 앞에 표시된다.
+// 창을 그 창의 자식으로 넣으면 아이콘 뒤, 배경화면 앞에 표시된다.
 // 대신 그 상태에서는 마우스 클릭을 받을 수 없어서 "편집 모드"로 꺼내서 쓴다.
 let win32 = null;
 if (process.platform === 'win32') {
   try {
     const koffi = require('koffi');
     const u = koffi.load('user32.dll');
-    const RECT = koffi.struct('RECT', { left: 'long', top: 'long', right: 'long', bottom: 'long' });
-    const EnumProc = koffi.proto('bool __stdcall EnumProc(intptr hwnd, intptr lParam)');
+    koffi.struct('RECT', { left: 'long', top: 'long', right: 'long', bottom: 'long' });
+    koffi.proto('bool __stdcall EnumProc(intptr hwnd, intptr lParam)');
     win32 = {
-      RECT,
       FindWindowW: u.func('intptr __stdcall FindWindowW(str16 cls, str16 name)'),
       FindWindowExW: u.func('intptr __stdcall FindWindowExW(intptr parent, intptr after, str16 cls, str16 name)'),
       SendMessageTimeoutW: u.func('intptr __stdcall SendMessageTimeoutW(intptr hwnd, uint msg, uintptr wp, intptr lp, uint flags, uint timeout, _Out_ uintptr *result)'),
@@ -65,104 +64,203 @@ function findWorkerW() {
 const SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40;
 const HWND_BOTTOM = 1;
 
-let win, tray;
-let mode = 'edit';          // 'desktop' = 아이콘 뒤에 고정, 'edit' = 일정 편집 가능
-let embedded = false;       // 실제로 WorkerW 안에 들어갔는지
+// ── 창 관리: 달력 창 + 메모 창 ───────────────────────────────────
+// 각 창은 { win, key, embedded } 로 관리하고, 고정/편집/잠금을 함께 적용한다.
+const managed = {};
+let mode = 'edit';          // 'desktop' = 아이콘 뒤에 고정, 'edit' = 편집 가능
 let fallbackTimer = null;   // 붙이기에 실패했을 때 맨 뒤로 보내는 타이머
+
+function embed(m) {
+  if (!win32 || m.embedded || !m.win.isVisible()) return;
+  try {
+    const hwnd = hwndOf(m.win);
+    const r = {}; win32.GetWindowRect(hwnd, r);
+    const workerw = findWorkerW();
+    if (!workerw) return;
+    const pr = {}; win32.GetWindowRect(workerw, pr);
+    win32.SetParent(hwnd, workerw);
+    win32.SetWindowPos(hwnd, 0, r.left - pr.left, r.top - pr.top, r.right - r.left, r.bottom - r.top,
+                       SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    m.embedded = true;
+  } catch (e) { console.error(e); }
+}
+
+function unembed(m) {
+  if (!win32 || !m.embedded) return;
+  try {
+    const hwnd = hwndOf(m.win);
+    const r = {}; win32.GetWindowRect(hwnd, r);
+    win32.SetParent(hwnd, 0);
+    win32.SetWindowPos(hwnd, 0, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_SHOWWINDOW);
+  } catch (e) { console.error(e); }
+  m.embedded = false;
+}
+
+function allWindows() { return Object.values(managed).filter(m => m.win && !m.win.isDestroyed()); }
 
 function enterDesktopMode() {
   mode = 'desktop';
   state.mode = mode; saveState();
-  if (win32) {
-    try {
-      const hwnd = hwndOf(win);
-      const r = {}; win32.GetWindowRect(hwnd, r);
-      const workerw = findWorkerW();
-      if (workerw) {
-        const pr = {}; win32.GetWindowRect(workerw, pr);
-        win32.SetParent(hwnd, workerw);
-        win32.SetWindowPos(hwnd, 0, r.left - pr.left, r.top - pr.top, r.right - r.left, r.bottom - r.top,
-                           SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        embedded = true;
-      }
-    } catch (e) { console.error(e); }
-    if (!embedded) {
-      // 붙이지 못하면 다른 창들의 맨 뒤로라도 보낸다
-      const back = () => { try { win32.SetWindowPos(hwndOf(win), HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE); } catch {} };
-      back(); fallbackTimer = setInterval(back, 1500);
-    }
+  allWindows().forEach(embed);
+  // 붙이지 못한 창은 다른 창들의 맨 뒤로라도 보낸다
+  if (fallbackTimer) clearInterval(fallbackTimer);
+  if (win32 && allWindows().some(m => !m.embedded && m.win.isVisible())) {
+    const back = () => allWindows().filter(m => !m.embedded && m.win.isVisible()).forEach(m => {
+      try { win32.SetWindowPos(hwndOf(m.win), HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE); } catch {}
+    });
+    back(); fallbackTimer = setInterval(back, 1500);
   }
-  win.setIgnoreMouseEvents(embedded);
-  notifyRenderer();
+  notifyRenderers();
 }
 
 function enterEditMode() {
   mode = 'edit';
   state.mode = mode; saveState();
   if (fallbackTimer) { clearInterval(fallbackTimer); fallbackTimer = null; }
-  if (win32 && embedded) {
-    try {
-      const hwnd = hwndOf(win);
-      const r = {}; win32.GetWindowRect(hwnd, r);
-      win32.SetParent(hwnd, 0);
-      win32.SetWindowPos(hwnd, 0, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_SHOWWINDOW);
-    } catch (e) { console.error(e); }
-    embedded = false;
-  }
-  win.setIgnoreMouseEvents(false);
-  win.show(); win.focus();
-  notifyRenderer();
+  allWindows().forEach(m => { unembed(m); if (m.win.isVisible()) m.win.show(); });
+  if (managed.main) managed.main.win.focus();
+  notifyRenderers();
 }
 
 function toggleMode() { mode === 'desktop' ? enterEditMode() : enterDesktopMode(); }
 
 function setLocked(on) {
   state.locked = !!on; saveState();
-  win.setMovable(!state.locked);
-  win.setResizable(!state.locked);
-  notifyRenderer();
+  allWindows().forEach(m => { m.win.setMovable(!state.locked); m.win.setResizable(!state.locked); });
+  notifyRenderers();
 }
 
-function notifyRenderer() {
-  if (win && !win.isDestroyed()) win.webContents.send('state', { mode, locked: !!state.locked });
+function notifyRenderers() {
+  const s = { mode, locked: !!state.locked, memoVisible: state.memoVisible !== false, version: app.getVersion() };
+  allWindows().forEach(m => m.win.webContents.send('state', s));
   buildTrayMenu();
 }
 
-function buildTrayMenu() {
-  if (!tray) return;
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: mode === 'desktop' ? '일정 편집하기 (Ctrl+Alt+C)' : '바탕화면에 고정하기 (Ctrl+Alt+C)', click: toggleMode },
-    { label: '위치·크기 잠금', type: 'checkbox', checked: !!state.locked, click: (i) => setLocked(i.checked) },
-    { label: '컴퓨터 켤 때 자동 실행', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,
-      click: (i) => app.setLoginItemSettings({ openAtLogin: i.checked }) },
-    { type: 'separator' },
-    { label: '종료', click: () => app.quit() },
-  ]));
-}
-
-if (!app.requestSingleInstanceLock()) app.quit();
-app.on('second-instance', () => win && enterEditMode());
-
-function createWindow() {
-  const b = state.bounds || {};
-  win = new BrowserWindow({
-    width: b.width || 1100, height: b.height || 720,
-    minWidth: 700, minHeight: 480,
-    x: b.x, y: b.y,
+function makeWindow(key, file, defaults) {
+  const b = (state.windows && state.windows[key]) || (key === 'main' ? state.bounds : null) || {};
+  const win = new BrowserWindow({
+    width: b.width || defaults.width, height: b.height || defaults.height,
+    minWidth: defaults.minWidth, minHeight: defaults.minHeight,
+    x: b.x ?? defaults.x, y: b.y ?? defaults.y,
     frame: false, transparent: true, resizable: !state.locked, movable: !state.locked,
-    skipTaskbar: true, hasShadow: false,
+    skipTaskbar: true, hasShadow: false, show: defaults.show !== false,
     minimizable: false, maximizable: false, fullscreenable: false,
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js') }
   });
   win.setMenu(null);
-  win.loadFile('index.html');
-  const saveBounds = () => { if (mode === 'edit') { state.bounds = win.getBounds(); saveState(); } };
+  win.loadFile(file);
+  const m = { win, key, embedded: false };
+  managed[key] = m;
+  const saveBounds = () => {
+    if (mode !== 'edit') return;
+    state.windows = state.windows || {};
+    state.windows[key] = win.getBounds(); saveState();
+  };
   win.on('moved', saveBounds);
   win.on('resized', saveBounds);
-  win.webContents.on('did-finish-load', () => {
-    notifyRenderer();
-    if (state.mode !== 'edit') setTimeout(enterDesktopMode, 300);
+  win.on('close', (e) => {
+    // 메모 창의 닫기는 숨기기로 처리
+    if (key === 'memo' && !quitting) { e.preventDefault(); setMemoVisible(false); }
+  });
+  win.webContents.on('did-finish-load', notifyRenderers);
+  return m;
+}
+
+function setMemoVisible(on) {
+  state.memoVisible = !!on; saveState();
+  const m = managed.memo; if (!m) return;
+  if (on) {
+    m.win.show();
+    if (mode === 'desktop') { embed(m); if (!m.embedded) enterDesktopMode(); }
+  } else {
+    unembed(m); m.win.hide();
+  }
+  notifyRenderers();
+}
+
+let tray, quitting = false;
+function buildTrayMenu() {
+  if (!tray) return;
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: mode === 'desktop' ? '일정 편집하기 (Ctrl+Alt+C)' : '바탕화면에 고정하기 (Ctrl+Alt+C)', click: toggleMode },
+    { label: '메모 창 보이기', type: 'checkbox', checked: state.memoVisible !== false, click: (i) => setMemoVisible(i.checked) },
+    { label: '위치·크기 잠금', type: 'checkbox', checked: !!state.locked, click: (i) => setLocked(i.checked) },
+    { label: '컴퓨터 켤 때 자동 실행', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,
+      click: (i) => app.setLoginItemSettings({ openAtLogin: i.checked }) },
+    { type: 'separator' },
+    { label: `업데이트 확인 (현재 ${app.getVersion()})`, click: () => checkForUpdates(true) },
+    { label: '종료', click: () => app.quit() },
+  ]));
+}
+
+// ── 자동 업데이트 ─────────────────────────────────────────────
+// GitHub Releases 에 새 버전이 올라오면 "업데이트 하시겠습니까?" 를 묻고,
+// "예" 를 누르면 내려받아 설치한 뒤 다시 실행한다. (설치판에서만 동작)
+let autoUpdater = null;
+let updateBusy = false;
+function setupUpdater() {
+  if (!app.isPackaged) return;
+  try { autoUpdater = require('electron-updater').autoUpdater; } catch (e) { console.error(e); return; }
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.on('update-available', async (info) => {
+    const r = await dialog.showMessageBox({
+      type: 'info', title: '바탕화면 캘린더 업데이트',
+      message: `새로운 버전(${info.version})이 있습니다.\n업데이트 하시겠습니까?`,
+      detail: `현재 버전: ${app.getVersion()}`,
+      buttons: ['예', '아니요'], defaultId: 0, cancelId: 1, noLink: true,
+    });
+    if (r.response === 0) {
+      tray && tray.setToolTip('바탕화면 캘린더 - 업데이트 내려받는 중...');
+      autoUpdater.downloadUpdate().catch(err => { updateBusy = false; showUpdateError(err); });
+    } else {
+      updateBusy = false;
+    }
+  });
+  autoUpdater.on('update-downloaded', () => {
+    quitting = true;
+    allWindows().forEach(unembed);
+    autoUpdater.quitAndInstall(true, true);
+  });
+  autoUpdater.on('error', (err) => { if (updateBusy === 'manual') showUpdateError(err); updateBusy = false; });
+  setTimeout(() => checkForUpdates(false), 8000);
+  setInterval(() => checkForUpdates(false), 6 * 60 * 60 * 1000);
+}
+function checkForUpdates(manual) {
+  if (!autoUpdater) {
+    if (manual) dialog.showMessageBox({ type: 'info', message: '설치판(Setup)으로 설치한 경우에만 자동 업데이트를 쓸 수 있습니다.', buttons: ['확인'] });
+    return;
+  }
+  if (updateBusy) return;
+  updateBusy = manual ? 'manual' : true;
+  autoUpdater.checkForUpdates().then(r => {
+    const newer = r && r.updateInfo && r.updateInfo.version !== app.getVersion();
+    if (!newer) {
+      updateBusy = false;
+      if (manual) dialog.showMessageBox({ type: 'info', message: `최신 버전(${app.getVersion()})을 사용 중입니다.`, buttons: ['확인'] });
+    }
+  }).catch(err => { if (manual) showUpdateError(err); updateBusy = false; });
+}
+function showUpdateError(err) {
+  dialog.showMessageBox({ type: 'warning', message: '업데이트를 확인하지 못했습니다.', detail: String(err && err.message || err).slice(0, 300), buttons: ['확인'] });
+}
+
+if (!app.requestSingleInstanceLock()) app.quit();
+app.on('second-instance', () => managed.main && enterEditMode());
+
+function createWindows() {
+  const wa = screen.getPrimaryDisplay().workArea;
+  const main = makeWindow('main', 'index.html', { width: 1000, height: 700, minWidth: 640, minHeight: 460 });
+  makeWindow('memo', 'memo.html', {
+    width: 320, height: 380, minWidth: 220, minHeight: 220,
+    x: wa.x + wa.width - 340, y: wa.y + 20, show: state.memoVisible !== false,
+  });
+
+  let started = false;
+  main.win.webContents.on('did-finish-load', () => {
+    if (started) return; started = true;
+    if (state.mode !== 'edit') setTimeout(enterDesktopMode, 500);
     if (!state.seenHint) {
       state.seenHint = true; saveState();
       new Notification({ title: '바탕화면 캘린더', body: '일정을 추가하려면 작업 표시줄 오른쪽의 달력 아이콘을 클릭하거나 Ctrl+Alt+C 를 누르세요.' }).show();
@@ -175,19 +273,23 @@ function createWindow() {
   buildTrayMenu();
 
   globalShortcut.register('Control+Alt+C', toggleMode);
+  setupUpdater();
 }
 
 ipcMain.handle('get-autostart', () => app.getLoginItemSettings().openAtLogin);
 ipcMain.handle('set-autostart', (_e, on) => { app.setLoginItemSettings({ openAtLogin: !!on }); buildTrayMenu(); });
 ipcMain.on('set-locked', (_e, on) => setLocked(on));
 ipcMain.on('desktop-mode', () => enterDesktopMode());
+ipcMain.on('set-memo-visible', (_e, on) => setMemoVisible(on));
+ipcMain.on('check-update', () => checkForUpdates(true));
 ipcMain.on('notify', (_e, title, body) => new Notification({ title, body }).show());
 ipcMain.on('quit', () => app.quit());
 
-app.whenReady().then(createWindow);
+app.whenReady().then(createWindows);
 app.on('before-quit', () => {
+  quitting = true;
   // 종료 전에 바탕화면에서 떼어내야 창이 깔끔하게 닫힌다
-  if (embedded) enterEditMode();
+  allWindows().forEach(unembed);
 });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());

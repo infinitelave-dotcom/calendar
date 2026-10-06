@@ -1,4 +1,4 @@
-name: Build Windows exe
+name: Build Windows installer
 on:
   workflow_dispatch:
   push:
@@ -14,25 +14,15 @@ jobs:
         with:
           node-version: 20
       - run: npm install
-      - run: npm run build
-      - name: Check koffi is packaged
+      # 새 버전(package.json 의 version)이면 GitHub Releases 에 v버전 으로 올린다.
+      # 설치된 앱은 여기에 올라온 latest.yml 을 보고 업데이트 여부를 판단한다.
+      - run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check native module is packaged
         shell: bash
         run: npx --yes @electron/asar list dist/win-unpacked/resources/app.asar | grep -q koffi || ls dist/win-unpacked/resources/app.asar.unpacked/node_modules/koffi
       - uses: actions/upload-artifact@v4
         with:
-          name: desktop-calendar-windows
-          path: |
-            dist/DesktopCalendar.exe
-            dist/DesktopCalendar.zip
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: 바탕화면 캘린더 (최신 버전)
-          body: |
-            추천 - DesktopCalendar.zip 을 내려받아 압축을 풀고, 폴더 안의 "바탕화면 캘린더.exe" 를 더블클릭하세요.
-            DesktopCalendar.exe 는 파일 하나로 실행되지만 윈도우 보안 검사에 오래 걸릴 수 있습니다.
-          make_latest: true
-          files: |
-            dist/DesktopCalendar.exe
-            dist/DesktopCalendar.zip
+          name: desktop-calendar-setup
+          path: dist/*.exe

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>메모</title>
+<style>
+  :root { --paper: #FFE88A; --ink: #3A3220; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:transparent; font-family:'Malgun Gothic','Segoe UI',sans-serif; user-select:none; }
+  #note { position:absolute; inset:6px 6px 0 6px; display:flex; flex-direction:column; }
+  #paper { flex:1; min-height:0; display:flex; flex-direction:column; background:var(--paper); color:var(--ink);
+           border-radius:4px 4px 12px 0; box-shadow:0 4px 14px rgba(0,0,0,.35); overflow:hidden; }
+  /* 위쪽 띠: 끌어서 창 이동 */
+  .bar { display:flex; align-items:center; gap:6px; padding:6px 8px; background:rgba(0,0,0,.07); -webkit-app-region:drag; flex:none; }
+  body.locked .bar { -webkit-app-region:no-drag; }
+  .bar .title { flex:1; font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.75; }
+  .dot { width:16px; height:16px; border-radius:50%; cursor:pointer; border:1.5px solid rgba(0,0,0,.25); -webkit-app-region:no-drag; flex:none; }
+  .dot.on { border:2px solid var(--ink); }
+  .bar button { -webkit-app-region:no-drag; background:transparent; border:0; color:var(--ink); font-size:15px; cursor:pointer; padding:0 4px; opacity:.6; }
+  .bar button:hover { opacity:1; }
+  textarea { flex:1; min-height:0; resize:none; border:0; outline:none; background:transparent; color:var(--ink);
+             padding:10px 14px 14px; font-size:16px; line-height:1.55; font-family:inherit; user-select:text; }
+  textarea::placeholder { color:rgba(58,50,32,.45); }
+  /* 아래쪽 시트 탭 (엑셀처럼) */
+  .sheets { display:flex; align-items:flex-start; gap:2px; overflow-x:auto; flex:none; height:34px; scrollbar-width:none; }
+  .sheets::-webkit-scrollbar { display:none; }
+  .sheet { min-width:34px; height:26px; padding:0 12px; border-radius:0 0 8px 8px; color:var(--ink); background:rgba(255,255,255,.55);
+           font-size:13px; line-height:26px; cursor:pointer; white-space:nowrap; flex:none; box-shadow:0 2px 4px rgba(0,0,0,.25); opacity:.8; }
+  .sheet.on { opacity:1; height:30px; line-height:30px; font-weight:700; box-shadow:0 3px 6px rgba(0,0,0,.3); }
+  .sheet input.edit { width:90px; border:0; background:rgba(255,255,255,.8); color:var(--ink); font-size:13px; font-family:inherit; border-radius:4px; padding:2px 4px; }
+  .add { flex:none; height:26px; padding:0 10px; border:0; border-radius:0 0 8px 8px; background:rgba(255,255,255,.4); color:#333;
+         font-size:16px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,.2); }
+  .add:hover { background:rgba(255,255,255,.7); }
+</style>
+</head>
+<body>
+<div id="note">
+  <div id="paper">
+    <div class="bar">
+      <div class="title" id="title"></div>
+      <div id="dots" style="display:flex;gap:5px"></div>
+      <button id="hide" title="메모 창 숨기기 (달력 위 [메모] 버튼으로 다시 열기)">✕</button>
+    </div>
+    <textarea id="text" placeholder="여기에 메모를 적으세요"></textarea>
+  </div>
+  <div class="sheets" id="sheets"></div>
+</div>
+<script src="common.js"></script>
+<script>
+const MEMO_COLORS = ['#FFE88A','#FFC1CC','#BDE8C0','#B9DDF7','#E1CFFF','#FFD3A8','#F4F1EA'];
+
+// 메모: [{id, title, text, color, u, deleted}]
+let memos = load('memos', null) || [touch({ id: uid(), title: '', text: '', color: MEMO_COLORS[0] })];
+let active = load('activeMemo', null);
+const saveMemos = () => { save('memos', memos); save('activeMemo', active); };
+const liveMemos = () => live(memos);
+function cur() {
+  let m = liveMemos().find(x => x.id === active);
+  if (!m) {
+    m = liveMemos()[0];
+    if (!m) { m = touch({ id: uid(), title: '', text: '', color: MEMO_COLORS[0] }); memos.push(m); save('memos', memos); }
+    active = m.id; save('activeMemo', active);
+  }
+  return m;
+}
+
+function render() {
+  const m = cur();
+  document.documentElement.style.setProperty('--paper', m.color);
+  const ta = $('text');
+  if (ta.value !== m.text) ta.value = m.text;
+  $('title').textContent = m.title;
+  // 종이 색
+  const dots = $('dots'); dots.innerHTML = '';
+  MEMO_COLORS.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (c === m.color ? ' on' : ''); d.style.background = c; d.title = '메모 색';
+    d.onclick = () => { m.color = c; touch(m); saveMemos(); render(); };
+    dots.append(d);
+  });
+  // 시트 탭
+  const bar = $('sheets'); bar.innerHTML = '';
+  liveMemos().forEach(memo => {
+    const tab = document.createElement('div');
+    tab.className = 'sheet' + (memo.id === m.id ? ' on' : '');
+    tab.style.background = memo.color;
+    tab.textContent = memo.title;            // 제목이 없으면 빈 탭
+    tab.title = '더블클릭: 제목 넣기 · 오른쪽 클릭: 삭제';
+    tab.onclick = () => { if (active !== memo.id) { active = memo.id; saveMemos(); render(); } };
+    tab.ondblclick = () => inlineEdit(tab, memo.title, { maxLength: 30, placeholder: '제목',
+      onDone: v => { if (v !== null && v !== memo.title) { memo.title = v; touch(memo); saveMemos(); } render(); } });
+    tab.oncontextmenu = e => { e.preventDefault(); remove(memo); };
+    bar.append(tab);
+  });
+  const add = document.createElement('button');
+  add.className = 'add'; add.textContent = '+'; add.title = '새 메모';
+  add.onclick = () => {
+    const memo = touch({ id: uid(), title: '', text: '', color: MEMO_COLORS[liveMemos().length % MEMO_COLORS.length] });
+    memos.push(memo); active = memo.id; saveMemos(); render(); $('text').focus();
+  };
+  bar.append(add);
+}
+
+function remove(memo) {
+  if (liveMemos().length === 1) {
+    if (confirm('메모 내용을 모두 지울까요?')) { memo.text = ''; memo.title = ''; touch(memo); saveMemos(); render(); }
+    return;
+  }
+  if (!confirm(`${memo.title ? `"${memo.title}"` : '이'} 메모를 삭제할까요?`)) return;
+  const list = liveMemos(), i = list.indexOf(memo);
+  memo.deleted = true; memo.text = ''; touch(memo);
+  if (active === memo.id) active = (list[i - 1] || list[i + 1]).id;
+  saveMemos(); render();
+}
+
+$('text').oninput = e => { const m = cur(); m.text = e.target.value; touch(m); saveMemos(); };
+$('hide').onclick = () => window.api.setMemoVisible(false);
+
+// 연동으로 다른 컴퓨터의 메모가 들어오면 다시 그리기
+window.addEventListener('storage', e => {
+  if (e.key === 'memos') { memos = load('memos', []); render(); }
+});
+
+window.api.onState(s => document.body.classList.toggle('locked', s.locked));
+render();
+</script>
+</body>
+</html>
