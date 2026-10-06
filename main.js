@@ -97,19 +97,36 @@ function unembed(m) {
 }
 
 function allWindows() { return Object.values(managed).filter(m => m.win && !m.win.isDestroyed()); }
+const mainWin = () => managed.main && !managed.main.win.isDestroyed() ? managed.main.win : null;
+const memoWin = () => managed.memo && !managed.memo.win.isDestroyed() ? managed.memo.win : null;
+
+// ── 메모 창은 항상 달력보다 위 ──
+// 달력이 바탕화면 아이콘 뒤에 붙어 있으면 메모(일반 창)는 자연히 그 위에 있다.
+// 달력이 일반 창일 때(편집 모드, 붙이기 실패)는 달력을 메모 바로 아래로 내린다.
+function keepMemoAbove() {
+  const main = mainWin(), memo = memoWin();
+  if (!win32 || !main || !memo || !memo.isVisible() || managed.main.embedded) return;
+  try { win32.SetWindowPos(hwndOf(main), hwndOf(memo), 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE); } catch {}
+}
+// 바탕화면 모드에서 메모를 다른 프로그램 창들 뒤로 보낸다 (달력보다는 위 유지)
+function sinkToBottom() {
+  if (!win32) return;
+  const memo = memoWin(), main = mainWin();
+  try {
+    if (main && !managed.main.embedded && main.isVisible()) win32.SetWindowPos(hwndOf(main), HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+    if (memo && memo.isVisible() && !memo.isFocused()) win32.SetWindowPos(hwndOf(memo), HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  } catch {}
+  keepMemoAbove();
+}
 
 function enterDesktopMode() {
   mode = 'desktop';
   state.mode = mode; saveState();
-  allWindows().forEach(embed);
-  // 붙이지 못한 창은 다른 창들의 맨 뒤로라도 보낸다
+  embed(managed.main);          // 바탕화면 아이콘 뒤에는 달력만 붙인다
   if (fallbackTimer) clearInterval(fallbackTimer);
-  if (win32 && allWindows().some(m => !m.embedded && m.win.isVisible())) {
-    const back = () => allWindows().filter(m => !m.embedded && m.win.isVisible()).forEach(m => {
-      try { win32.SetWindowPos(hwndOf(m.win), HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE); } catch {}
-    });
-    back(); fallbackTimer = setInterval(back, 1500);
-  }
+  // 달력을 붙이지 못했으면 다른 창들의 맨 뒤로라도 계속 보낸다
+  if (win32 && !managed.main.embedded) fallbackTimer = setInterval(sinkToBottom, 1500);
+  sinkToBottom();
   notifyRenderers();
 }
 
@@ -117,32 +134,40 @@ function enterEditMode() {
   mode = 'edit';
   state.mode = mode; saveState();
   if (fallbackTimer) { clearInterval(fallbackTimer); fallbackTimer = null; }
-  allWindows().forEach(m => { unembed(m); if (m.win.isVisible()) m.win.show(); });
-  if (managed.main) managed.main.win.focus();
+  unembed(managed.main);
+  mainWin().show(); mainWin().focus();
+  setTimeout(keepMemoAbove, 50);
   notifyRenderers();
 }
 
 function toggleMode() { mode === 'desktop' ? enterEditMode() : enterDesktopMode(); }
 
+// 달력 잠금과 메모 잠금은 따로
 function setLocked(on) {
   state.locked = !!on; saveState();
-  allWindows().forEach(m => { m.win.setMovable(!state.locked); m.win.setResizable(!state.locked); });
+  const w = mainWin(); if (w) { w.setMovable(!state.locked); w.setResizable(!state.locked); }
+  notifyRenderers();
+}
+function setMemoLocked(on) {
+  state.memoLocked = !!on; saveState();
+  const w = memoWin(); if (w) { w.setMovable(!state.memoLocked); w.setResizable(!state.memoLocked); }
   notifyRenderers();
 }
 
 function notifyRenderers() {
-  const s = { mode, locked: !!state.locked, memoVisible: state.memoVisible !== false, version: app.getVersion() };
+  const s = { mode, locked: !!state.locked, memoLocked: !!state.memoLocked, memoVisible: state.memoVisible !== false, version: app.getVersion() };
   allWindows().forEach(m => m.win.webContents.send('state', s));
   buildTrayMenu();
 }
 
 function makeWindow(key, file, defaults) {
   const b = (state.windows && state.windows[key]) || (key === 'main' ? state.bounds : null) || {};
+  const locked = key === 'memo' ? !!state.memoLocked : !!state.locked;
   const win = new BrowserWindow({
     width: b.width || defaults.width, height: b.height || defaults.height,
     minWidth: defaults.minWidth, minHeight: defaults.minHeight,
     x: b.x ?? defaults.x, y: b.y ?? defaults.y,
-    frame: false, transparent: true, resizable: !state.locked, movable: !state.locked,
+    frame: false, transparent: true, resizable: !locked, movable: !locked,
     skipTaskbar: true, hasShadow: false, show: defaults.show !== false,
     minimizable: false, maximizable: false, fullscreenable: false,
     icon: path.join(__dirname, 'icon.png'),
@@ -153,7 +178,7 @@ function makeWindow(key, file, defaults) {
   const m = { win, key, embedded: false };
   managed[key] = m;
   const saveBounds = () => {
-    if (mode !== 'edit') return;
+    if (key === 'main' && mode !== 'edit') return;   // 붙어 있는 동안의 좌표는 저장하지 않는다
     state.windows = state.windows || {};
     state.windows[key] = win.getBounds(); saveState();
   };
@@ -169,13 +194,8 @@ function makeWindow(key, file, defaults) {
 
 function setMemoVisible(on) {
   state.memoVisible = !!on; saveState();
-  const m = managed.memo; if (!m) return;
-  if (on) {
-    m.win.show();
-    if (mode === 'desktop') { embed(m); if (!m.embedded) enterDesktopMode(); }
-  } else {
-    unembed(m); m.win.hide();
-  }
+  const w = memoWin(); if (!w) return;
+  if (on) { w.show(); keepMemoAbove(); } else w.hide();
   notifyRenderers();
 }
 
@@ -185,7 +205,8 @@ function buildTrayMenu() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: mode === 'desktop' ? '일정 편집하기 (Ctrl+Alt+C)' : '바탕화면에 고정하기 (Ctrl+Alt+C)', click: toggleMode },
     { label: '메모 창 보이기', type: 'checkbox', checked: state.memoVisible !== false, click: (i) => setMemoVisible(i.checked) },
-    { label: '위치·크기 잠금', type: 'checkbox', checked: !!state.locked, click: (i) => setLocked(i.checked) },
+    { label: '달력 위치·크기 잠금', type: 'checkbox', checked: !!state.locked, click: (i) => setLocked(i.checked) },
+    { label: '메모 위치·크기 잠금', type: 'checkbox', checked: !!state.memoLocked, click: (i) => setMemoLocked(i.checked) },
     { label: '컴퓨터 켤 때 자동 실행', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,
       click: (i) => app.setLoginItemSettings({ openAtLogin: i.checked }) },
     { type: 'separator' },
@@ -257,6 +278,10 @@ function createWindows() {
     x: wa.x + wa.width - 340, y: wa.y + 20, show: state.memoVisible !== false,
   });
 
+  main.win.on('focus', () => setTimeout(keepMemoAbove, 30));
+  const memo = managed.memo;
+  memo.win.on('blur', () => { if (mode === 'desktop') setTimeout(sinkToBottom, 30); });
+
   let started = false;
   main.win.webContents.on('did-finish-load', () => {
     if (started) return; started = true;
@@ -279,6 +304,7 @@ function createWindows() {
 ipcMain.handle('get-autostart', () => app.getLoginItemSettings().openAtLogin);
 ipcMain.handle('set-autostart', (_e, on) => { app.setLoginItemSettings({ openAtLogin: !!on }); buildTrayMenu(); });
 ipcMain.on('set-locked', (_e, on) => setLocked(on));
+ipcMain.on('set-memo-locked', (_e, on) => setMemoLocked(on));
 ipcMain.on('desktop-mode', () => enterDesktopMode());
 ipcMain.on('set-memo-visible', (_e, on) => setMemoVisible(on));
 ipcMain.on('check-update', () => checkForUpdates(true));

@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <title>메모</title>
 <style>
-  :root { --paper: #FFE88A; --ink: #3A3220; }
+  :root { --paper: #FFE88A; --ink: #3A3220; --shadow: rgba(0,0,0,.35); --ts: none; }
   * { box-sizing: border-box; }
   html, body { margin:0; height:100%; background:transparent; font-family:'Malgun Gothic','Segoe UI',sans-serif; user-select:none; }
   #note { position:absolute; inset:6px 6px 0 6px; display:flex; flex-direction:column; }
   #paper { flex:1; min-height:0; display:flex; flex-direction:column; background:var(--paper); color:var(--ink);
-           border-radius:4px 4px 12px 0; box-shadow:0 4px 14px rgba(0,0,0,.35); overflow:hidden; }
+           border-radius:4px 4px 12px 0; box-shadow:0 4px 14px var(--shadow); overflow:hidden; text-shadow:var(--ts); }
   /* 위쪽 띠: 끌어서 창 이동 */
   .bar { display:flex; align-items:center; gap:6px; padding:6px 8px; background:rgba(0,0,0,.07); -webkit-app-region:drag; flex:none; }
   body.locked .bar { -webkit-app-region:no-drag; }
@@ -18,14 +18,21 @@
   .dot.on { border:2px solid var(--ink); }
   .bar button { -webkit-app-region:no-drag; background:transparent; border:0; color:var(--ink); font-size:15px; cursor:pointer; padding:0 4px; opacity:.6; }
   .bar button:hover { opacity:1; }
+  .bar button svg { width:16px; height:16px; display:block; }
+  .bar button.on { opacity:1; background:rgba(0,0,0,.15); border-radius:5px; }
+  /* 투명도 조절 줄 */
+  .opbar { display:none; align-items:center; gap:8px; padding:4px 10px; font-size:12px; background:rgba(0,0,0,.05); flex:none; }
+  .opbar.open { display:flex; }
+  .opbar input { flex:1; }
+  .opbar span { width:34px; text-align:right; }
   textarea { flex:1; min-height:0; resize:none; border:0; outline:none; background:transparent; color:var(--ink);
              padding:10px 14px 14px; font-size:16px; line-height:1.55; font-family:inherit; user-select:text; }
-  textarea::placeholder { color:rgba(58,50,32,.45); }
+  textarea::placeholder { color:var(--ink); opacity:.45; }
   /* 아래쪽 시트 탭 (엑셀처럼) */
   .sheets { display:flex; align-items:flex-start; gap:2px; overflow-x:auto; flex:none; height:34px; scrollbar-width:none; }
   .sheets::-webkit-scrollbar { display:none; }
   .sheet { min-width:34px; height:26px; padding:0 12px; border-radius:0 0 8px 8px; color:var(--ink); background:rgba(255,255,255,.55);
-           font-size:13px; line-height:26px; cursor:pointer; white-space:nowrap; flex:none; box-shadow:0 2px 4px rgba(0,0,0,.25); opacity:.8; }
+           font-size:13px; line-height:26px; cursor:pointer; white-space:nowrap; flex:none; box-shadow:0 2px 4px var(--shadow); opacity:.8; text-shadow:var(--ts); }
   .sheet.on { opacity:1; height:30px; line-height:30px; font-weight:700; box-shadow:0 3px 6px rgba(0,0,0,.3); }
   .sheet input.edit { width:90px; border:0; background:rgba(255,255,255,.8); color:var(--ink); font-size:13px; font-family:inherit; border-radius:4px; padding:2px 4px; }
   .add { flex:none; height:26px; padding:0 10px; border:0; border-radius:0 0 8px 8px; background:rgba(255,255,255,.4); color:#333;
@@ -39,8 +46,11 @@
     <div class="bar">
       <div class="title" id="title"></div>
       <div id="dots" style="display:flex;gap:5px"></div>
+      <button id="opBtn" title="메모 투명도"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+      <button id="lockBtn" title="메모 위치·크기 잠금 (달력 잠금과 별도)"></button>
       <button id="hide" title="메모 창 숨기기 (달력 위 [메모] 버튼으로 다시 열기)">✕</button>
     </div>
+    <div class="opbar" id="opbar">투명도 <input type="range" id="opacity" min="15" max="100"><span id="opVal"></span></div>
     <textarea id="text" placeholder="여기에 메모를 적으세요"></textarea>
   </div>
   <div class="sheets" id="sheets"></div>
@@ -64,9 +74,35 @@ function cur() {
   return m;
 }
 
+// 메모 투명도 (달력과 따로). 많이 비칠 때는 글자를 흰색+그림자로 바꿔 어두운 배경에서도 보이게 한다.
+let memoCfg = Object.assign({ opacity: 100 }, load('memoCfg', {}));
+const paperOf = c => `rgba(${hexRgb(c).join(',')},${memoCfg.opacity / 100})`;
+function applyOpacity() {
+  const a = memoCfg.opacity / 100, s = document.documentElement.style;
+  const see = a < 0.6;
+  s.setProperty('--ink', see ? '#FFFFFF' : '#3A3220');
+  s.setProperty('--ts', see ? '0 0 3px rgba(0,0,0,.95), 0 1px 2px rgba(0,0,0,.9)' : 'none');
+  s.setProperty('--shadow', `rgba(0,0,0,${(0.35 * a).toFixed(2)})`);
+  $('opacity').value = memoCfg.opacity; $('opVal').textContent = memoCfg.opacity + '%';
+}
+$('opBtn').onclick = () => { $('opbar').classList.toggle('open'); $('opBtn').classList.toggle('on'); };
+$('opacity').oninput = e => { memoCfg.opacity = +e.target.value; save('memoCfg', memoCfg); applyOpacity(); render(); };
+
+// 메모 잠금 (달력 잠금과 별도)
+const LOCK_ON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const LOCK_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
+let locked = false;
+function showLock() {
+  $('lockBtn').innerHTML = locked ? LOCK_ON : LOCK_OFF;
+  $('lockBtn').classList.toggle('on', locked);
+  $('lockBtn').title = locked ? '메모 잠김 - 눌러서 풀기' : '메모 위치·크기 잠금 (달력 잠금과 별도)';
+  document.body.classList.toggle('locked', locked);
+}
+$('lockBtn').onclick = () => { locked = !locked; showLock(); window.api.setMemoLocked(locked); };
+
 function render() {
   const m = cur();
-  document.documentElement.style.setProperty('--paper', m.color);
+  document.documentElement.style.setProperty('--paper', paperOf(m.color));
   const ta = $('text');
   if (ta.value !== m.text) ta.value = m.text;
   $('title').textContent = m.title;
@@ -83,7 +119,7 @@ function render() {
   liveMemos().forEach(memo => {
     const tab = document.createElement('div');
     tab.className = 'sheet' + (memo.id === m.id ? ' on' : '');
-    tab.style.background = memo.color;
+    tab.style.background = paperOf(memo.color);
     tab.textContent = memo.title;            // 제목이 없으면 빈 탭
     tab.title = '더블클릭: 제목 넣기 · 오른쪽 클릭: 삭제';
     tab.onclick = () => { if (active !== memo.id) { active = memo.id; saveMemos(); render(); } };
@@ -121,8 +157,8 @@ window.addEventListener('storage', e => {
   if (e.key === 'memos') { memos = load('memos', []); render(); }
 });
 
-window.api.onState(s => document.body.classList.toggle('locked', s.locked));
-render();
+window.api.onState(s => { locked = s.memoLocked; showLock(); });
+showLock(); applyOpacity(); render();
 </script>
 </body>
 </html>
