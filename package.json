@@ -1,6 +1,6 @@
 {
   "name": "desktop-calendar",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "바탕화면 캘린더",
   "main": "main.js",
   "scripts": {
@@ -17,10 +17,13 @@
     "files": [
       "main.js",
       "preload.js",
-      "index.html"
+      "index.html",
+      "icon.png",
+      "tray.png"
     ],
     "win": {
-      "artifactName": "DesktopCalendar.${ext}"
+      "artifactName": "DesktopCalendar.${ext}",
+      "icon": "icon.ico"
     },
     "portable": {
       "artifactName": "DesktopCalendar.exe"
