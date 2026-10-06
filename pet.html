@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>캐릭터</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:transparent; overflow:hidden; user-select:none; font-family:'Malgun Gothic','Segoe UI',sans-serif; }
+  :root { --size: 96px; }
+
+  /* 캐릭터: 창 아래 가운데에 발이 닿게 */
+  #char { position:absolute; left:50%; bottom:0; width:var(--size); height:var(--size); margin-left:calc(var(--size) / -2); cursor:grab; }
+  body.drag #char { cursor:grabbing; }
+  #flip { width:100%; height:100%; transform-origin:50% 100%; }
+  body.left #flip { transform:scaleX(-1); }          /* 왼쪽으로 갈 때 좌우 반전 */
+  #pose { width:100%; height:100%; transform-origin:50% 100%; }
+  #pose svg, #pose img { width:100%; height:100%; display:block; object-fit:contain; pointer-events:none; -webkit-user-drag:none; }
+
+  /* ── 상태별 움직임 ── */
+  body.walk #pose { animation:bob .32s ease-in-out infinite alternate; }
+  @keyframes bob { from { transform:translateY(0) rotate(-2deg); } to { transform:translateY(-6%) rotate(2deg); } }
+  body.idle #pose { animation:breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe { 0%,100% { transform:scaleY(1); } 50% { transform:scaleY(.96); } }
+  body.sleep #pose { transform:scaleY(.9); }
+  body.land #pose { animation:squash .45s ease-out; }
+  @keyframes squash { 0% { transform:scale(1.15,.75); } 60% { transform:scale(.95,1.06); } 100% { transform:scale(1,1); } }
+  body.fall #pose { animation:wobble .25s ease-in-out infinite alternate; }
+  @keyframes wobble { from { transform:rotate(-8deg); } to { transform:rotate(8deg); } }
+  body.drag #pose { transform-origin:50% 8%; animation:swing .7s ease-in-out infinite alternate; }
+  @keyframes swing { from { transform:rotate(-14deg); } to { transform:rotate(14deg); } }
+  /* 벽 타기: 벽 쪽을 보고 몸을 벽에 붙인다 */
+  body.climb.wall-left #flip { transform:rotate(90deg); transform-origin:50% 50%; }
+  body.climb.wall-right #flip { transform:rotate(-90deg); transform-origin:50% 50%; }
+  body.climb #pose { animation:bob .4s ease-in-out infinite alternate; }
+
+  /* 기본 캐릭터 그림의 부분들 */
+  .legL, .legR, .armL, .armR { transform-box:fill-box; }
+  .legL, .legR { transform-origin:50% 0%; }
+  .armL { transform-origin:100% 0%; } .armR { transform-origin:0% 0%; }
+  body.walk .legL, body.climb .legL { animation:step .32s ease-in-out infinite alternate; }
+  body.walk .legR, body.climb .legR { animation:step .32s ease-in-out infinite alternate-reverse; }
+  @keyframes step { from { transform:rotate(-25deg); } to { transform:rotate(25deg); } }
+  body.walk .armL { animation:step .32s ease-in-out infinite alternate-reverse; }
+  body.walk .armR { animation:step .32s ease-in-out infinite alternate; }
+  body.fall .armL, body.drag .armL, body.climb .armL { transform:rotate(70deg); }
+  body.fall .armR, body.drag .armR, body.climb .armR { transform:rotate(-70deg); }
+  body.drag .legL, body.drag .legR { animation:step .5s ease-in-out infinite alternate; }
+  body.idle .legL { transform:rotate(-35deg); } body.idle .legR { transform:rotate(35deg); }
+  #dateNum { transform-box:fill-box; transform-origin:50% 50%; }
+  body.left #dateNum { transform:scaleX(-1); }   /* 몸이 뒤집혀도 숫자는 바로 보이게 */
+  .eyesShut, .mouthO, .zzz { display:none; }
+  body.sleep .eyes, body.sleep .mouth { display:none; }
+  body.sleep .eyesShut, body.sleep .zzz { display:inline; }
+  body.fall .mouth, body.drag .mouth { display:none; }
+  body.fall .mouthO, body.drag .mouthO { display:inline; }
+  .blink { animation:blink 4s infinite; transform-box:fill-box; transform-origin:50% 50%; }
+  @keyframes blink { 0%,94%,100% { transform:scaleY(1); } 97% { transform:scaleY(.1); } }
+  .zzz { animation:zz 2s ease-in-out infinite; }
+  @keyframes zz { 0% { opacity:0; transform:translate(0,0); } 50% { opacity:1; } 100% { opacity:0; transform:translate(6px,-10px); } }
+
+  /* 말풍선 */
+  #bubble { position:absolute; left:50%; bottom:calc(var(--size) + 8px); transform:translateX(-50%) scale(.6); opacity:0; transition:opacity .2s, transform .2s;
+            max-width:200px; width:max-content; background:#FFFDF6; color:#1B2A41; border:2px solid #1B2A41; border-radius:12px;
+            padding:6px 10px; font-size:13px; line-height:1.45; pointer-events:none; white-space:pre-line; text-align:center; }
+  #bubble::after { content:''; position:absolute; left:50%; bottom:-8px; margin-left:-7px; border:7px solid transparent; border-top-color:#1B2A41; border-bottom:0; }
+  #bubble.on { opacity:1; transform:translateX(-50%) scale(1); }
+</style>
+</head>
+<body class="fall">
+<div id="bubble"></div>
+<div id="char"><div id="flip"><div id="pose"></div></div></div>
+
+<template id="defaultChar">
+  <!-- 기본 캐릭터: 달력 모양 친구 -->
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <g stroke="#1B2A41" stroke-width="4" stroke-linecap="round">
+      <line class="legL" x1="40" y1="84" x2="40" y2="97"/>
+      <line class="legR" x1="60" y1="84" x2="60" y2="97"/>
+      <line class="armL" x1="18" y1="56" x2="7" y2="66"/>
+      <line class="armR" x1="82" y1="56" x2="93" y2="66"/>
+    </g>
+    <rect x="17" y="18" width="66" height="68" rx="14" fill="#F6F4EE" stroke="#1B2A41" stroke-width="3.5"/>
+    <path d="M17 32 V31 a14 14 0 0 1 14 -14 h38 a14 14 0 0 1 14 14 V36 H17 z" fill="#F2A65A" stroke="#1B2A41" stroke-width="3.5"/>
+    <rect x="33" y="9" width="7" height="17" rx="3.5" fill="#1B2A41"/>
+    <rect x="60" y="9" width="7" height="17" rx="3.5" fill="#1B2A41"/>
+    <g class="eyes"><g class="blink"><circle cx="39" cy="51" r="4.2" fill="#1B2A41"/><circle cx="61" cy="51" r="4.2" fill="#1B2A41"/>
+      <circle cx="40.5" cy="49.5" r="1.4" fill="#fff"/><circle cx="62.5" cy="49.5" r="1.4" fill="#fff"/></g></g>
+    <g class="eyesShut" stroke="#1B2A41" stroke-width="3" stroke-linecap="round" fill="none"><path d="M34 52 q5 4 10 0"/><path d="M56 52 q5 4 10 0"/></g>
+    <ellipse cx="31" cy="60" rx="5" ry="3" fill="#FF8A80" opacity=".55"/>
+    <ellipse cx="69" cy="60" rx="5" ry="3" fill="#FF8A80" opacity=".55"/>
+    <path class="mouth" d="M44 60 q6 6 12 0" stroke="#1B2A41" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <ellipse class="mouthO" cx="50" cy="62" rx="3.5" ry="4.5" fill="#1B2A41"/>
+    <text id="dateNum" x="50" y="80" text-anchor="middle" font-size="11" font-weight="700" fill="#1B2A41" font-family="Segoe UI, sans-serif"></text>
+    <text class="zzz" x="80" y="14" font-size="14" font-weight="700" fill="#7FC8F8" font-family="Segoe UI, sans-serif">z</text>
+  </svg>
+</template>
+
+<script src="common.js"></script>
+<script>
+const body = document.body, pose = $('pose'), charEl = $('char');
+
+// 그림 정하기: 사용자가 고른 그림이 있으면 그것, 없으면 기본 캐릭터
+window.api.onPet('pet-config', cfg => {
+  document.documentElement.style.setProperty('--size', cfg.size + 'px');
+  pose.innerHTML = '';
+  if (cfg.image) {
+    const img = document.createElement('img'); img.src = cfg.image; img.alt = ''; img.draggable = false;
+    pose.append(img);
+  } else {
+    pose.append($('defaultChar').content.cloneNode(true));
+    pose.querySelector('#dateNum').textContent = new Date().getDate();
+  }
+});
+
+// 상태(걷기/앉기/잠/떨어짐/잡힘/벽타기)에 맞는 모습
+window.api.onPet('pet-state', s => {
+  body.className = s.state + (s.dir < 0 ? ' left' : '') + (s.side ? ' wall-' + s.side : '');
+  if (s.state === 'sleep') say('', 0);
+});
+
+// ── 마우스: 캐릭터 위에서만 클릭을 받는다 ──
+let down = null;
+charEl.addEventListener('mouseenter', () => window.api.petMouse(true));
+charEl.addEventListener('mouseleave', () => { if (!down) window.api.petMouse(false); });
+charEl.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  down = { x: e.screenX, y: e.screenY, t: Date.now() };
+  window.api.petDrag(true, false);
+});
+window.addEventListener('mouseup', e => {
+  if (!down) return;
+  const click = Math.hypot(e.screenX - down.x, e.screenY - down.y) < 5 && Date.now() - down.t < 300;
+  down = null;
+  window.api.petDrag(false, click);
+  if (click) talk();
+  if (!charEl.matches(':hover')) window.api.petMouse(false);
+});
+charEl.addEventListener('dblclick', () => window.api.petDouble());
+
+// ── 말하기: 클릭하면 오늘 일정을 알려준다 ──
+let sayTimer = null;
+function say(text, ms = 4000) {
+  const b = $('bubble');
+  clearTimeout(sayTimer);
+  if (!text) { b.classList.remove('on'); return; }
+  b.textContent = text; b.classList.add('on');
+  sayTimer = setTimeout(() => b.classList.remove('on'), ms);
+}
+function talk() {
+  const d = new Date();
+  const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const today = live(load('events2', [])).filter(e => e.start <= k && k <= e.end)
+    .sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+  if (today.length) {
+    const lines = today.slice(0, 3).map(e => (e.time ? e.time + ' ' : '') + e.text);
+    say('오늘 일정이에요!\n' + lines.join('\n') + (today.length > 3 ? `\n외 ${today.length - 3}개` : ''), 5000);
+  } else {
+    const idle = ['오늘은 일정이 없어요!', '뭐 하고 놀까요?', '오늘도 힘내요!', '물 한 잔 마셔요 💧', '쉬엄쉬엄 해요~'];
+    say(idle[Math.floor(Math.random() * idle.length)]);
+  }
+}
+</script>
+</body>
+</html>

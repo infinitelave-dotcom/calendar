@@ -131,6 +131,15 @@
       <div class="row" id="versionRow"></div>
       <button id="updateBtn" type="button">업데이트 확인</button>
       <hr>
+      <div class="row"><b>바탕화면 캐릭터</b></div>
+      <div class="row"><input type="checkbox" id="petOn"> 캐릭터가 화면을 돌아다니기</div>
+      <div class="row">크기 <input type="range" id="petSize" min="48" max="200"></div>
+      <div class="btns">
+        <button type="button" id="petPick" title="PNG, GIF(움직이는 그림), JPG, WEBP">내 그림으로 바꾸기</button>
+        <button type="button" id="petDefault">기본 캐릭터</button>
+      </div>
+      <div class="hint">캐릭터를 클릭하면 오늘 일정을 알려주고, 끌어서 던질 수 있어요. 더블클릭하면 달력 편집 모드가 됩니다.</div>
+      <hr>
       <label>초기화</label>
       <div class="btns">
         <button type="button" id="resetSettings" title="색상·투명도·창 위치·잠금을 처음 상태로 (일정과 메모는 그대로)">설정 초기화</button>
@@ -323,6 +332,12 @@ window.api.getAutostart().then(v => $('auto').checked = v);
 $('auto').onchange = e => window.api.setAutostart(e.target.checked);
 $('updateBtn').onclick = () => window.api.checkUpdate();
 
+// ── 바탕화면 캐릭터 ──
+$('petOn').onchange = e => window.api.setPet({ visible: e.target.checked });
+$('petSize').onchange = e => window.api.setPet({ size: +e.target.value });
+$('petPick').onclick = () => window.api.pickPetImage();
+$('petDefault').onclick = () => window.api.defaultPetImage();
+
 // ── 초기화 ──
 // 설정 초기화: 색상·투명도·창 위치·크기·잠금을 처음 상태로. 일정과 메모는 남긴다.
 // 전체 초기화: 일정·메모까지 모두 지운다.
@@ -351,6 +366,11 @@ $('lockBtn').onclick = () => { locked = !locked; showButtons(); window.api.setLo
 $('memoBtn').onclick = () => { memoVisible = !memoVisible; showButtons(); window.api.setMemoVisible(memoVisible); };
 $('pinBtn').onclick = () => { $('settings').classList.remove('open'); window.api.desktopMode(); };
 window.api.onState(s => {
+  if (s.pet) {
+    $('petOn').checked = s.pet.visible;
+    if (document.activeElement !== $('petSize')) $('petSize').value = s.pet.size;
+    $('petDefault').disabled = !s.pet.custom; $('petDefault').style.opacity = s.pet.custom ? 1 : .5;
+  }
   locked = s.locked; memoVisible = s.memoVisible; showButtons();
   if (s.version) $('versionRow').textContent = `현재 버전 ${s.version}`;
 });

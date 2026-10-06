@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, globalShortcut, nativeImage, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { createPet } = require('./pet');
 
 const stateFile = path.join(app.getPath('userData'), 'window-v2.json');
 function loadState() {
@@ -155,7 +156,8 @@ function setMemoLocked(on) {
 }
 
 function notifyRenderers() {
-  const s = { mode, locked: !!state.locked, memoLocked: !!state.memoLocked, memoVisible: state.memoVisible !== false, version: app.getVersion() };
+  const s = { mode, locked: !!state.locked, memoLocked: !!state.memoLocked, memoVisible: state.memoVisible !== false, version: app.getVersion(),
+             pet: { visible: state.petVisible !== false, size: state.petSize || 96, custom: !!state.petImage } };
   allWindows().forEach(m => m.win.webContents.send('state', s));
   buildTrayMenu();
 }
@@ -199,12 +201,25 @@ function setMemoVisible(on) {
   notifyRenderers();
 }
 
+// ── 바탕화면 캐릭터 ──
+const pet = createPet({
+  getState: () => state, saveState,
+  preload: path.join(__dirname, 'preload.js'),
+  onDoubleClick: () => enterEditMode(),      // 캐릭터를 더블클릭하면 달력 편집
+});
+function setPet({ visible, size }) {
+  if (visible !== undefined) state.petVisible = !!visible;
+  if (size !== undefined) state.petSize = Math.round(size);
+  saveState(); pet.apply(); notifyRenderers();
+}
+
 let tray, quitting = false;
 function buildTrayMenu() {
   if (!tray) return;
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: mode === 'desktop' ? '일정 편집하기 (Ctrl+Alt+C)' : '바탕화면에 고정하기 (Ctrl+Alt+C)', click: toggleMode },
     { label: '메모 창 보이기', type: 'checkbox', checked: state.memoVisible !== false, click: (i) => setMemoVisible(i.checked) },
+    { label: '캐릭터 보이기', type: 'checkbox', checked: state.petVisible !== false, click: (i) => setPet({ visible: i.checked }) },
     { label: '달력 위치·크기 잠금', type: 'checkbox', checked: !!state.locked, click: (i) => setLocked(i.checked) },
     { label: '메모 위치·크기 잠금', type: 'checkbox', checked: !!state.memoLocked, click: (i) => setMemoLocked(i.checked) },
     { label: '컴퓨터 켤 때 자동 실행', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,
@@ -299,6 +314,7 @@ function createWindows() {
 
   globalShortcut.register('Control+Alt+C', toggleMode);
   setupUpdater();
+  pet.apply();
 }
 
 ipcMain.handle('get-autostart', () => app.getLoginItemSettings().openAtLogin);
@@ -312,7 +328,9 @@ ipcMain.on('check-update', () => checkForUpdates(true));
 ipcMain.on('reset', () => {
   if (fallbackTimer) { clearInterval(fallbackTimer); fallbackTimer = null; }
   allWindows().forEach(unembed);
+  pet.defaultImage();
   state = { seenHint: true, mode: 'edit' }; saveState();
+  pet.apply();
   mode = 'edit';
   const wa = screen.getPrimaryDisplay().workArea;
   const main = mainWin(), memo = memoWin();
@@ -323,12 +341,19 @@ ipcMain.on('reset', () => {
   if (main) main.focus();
   setTimeout(keepMemoAbove, 300);
 });
+ipcMain.on('pet-set', (_e, o) => setPet(o || {}));
+ipcMain.handle('pet-pick-image', async () => { const ok = await pet.pickImage(mainWin()); notifyRenderers(); return ok; });
+ipcMain.on('pet-default-image', () => { pet.defaultImage(); notifyRenderers(); });
+ipcMain.on('pet-mouse', (_e, over) => pet.onMouse(over));
+ipcMain.on('pet-drag', (_e, on, click) => pet.onDrag(on, click));
+ipcMain.on('pet-double', () => pet.onDoubleClick());
 ipcMain.on('notify', (_e, title, body) => new Notification({ title, body }).show());
 ipcMain.on('quit', () => app.quit());
 
 app.whenReady().then(createWindows);
 app.on('before-quit', () => {
   quitting = true;
+  pet.hide();
   // 종료 전에 바탕화면에서 떼어내야 창이 깔끔하게 닫힌다
   allWindows().forEach(unembed);
 });
