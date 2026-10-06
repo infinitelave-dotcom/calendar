@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>바탕화면 캘린더</title>
+<style>
+  :root { --bg: rgba(27,42,65,0.85); --fg:#F6F4EE; --accent:#F2A65A; --muted:#9FB0C8; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:transparent; font-family:'Malgun Gothic','Segoe UI',sans-serif; color:var(--fg); user-select:none; }
+  #app { height:100%; background:var(--bg); border-radius:16px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
+  header { display:flex; align-items:center; gap:6px; -webkit-app-region:drag; }
+  header h1 { flex:1; margin:0; font-size:18px; text-align:center; }
+  button { -webkit-app-region:no-drag; background:rgba(255,255,255,.12); color:var(--fg); border:0; border-radius:8px; padding:4px 10px; font-size:14px; cursor:pointer; }
+  button:hover { background:rgba(255,255,255,.25); }
+  .grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+  .dow { text-align:center; font-size:12px; color:var(--muted); padding:2px 0; }
+  .dow:first-child, .day.sun { color:#FF9B8A; }
+  .day { text-align:center; padding:6px 0 8px; border-radius:8px; cursor:pointer; font-size:14px; position:relative; }
+  .day:hover { background:rgba(255,255,255,.14); }
+  .day.other { opacity:.35; }
+  .day.today { background:var(--accent); color:#1B2A41; font-weight:700; }
+  .day.sel { outline:2px solid var(--accent); }
+  .day .dot { position:absolute; bottom:2px; left:50%; width:5px; height:5px; margin-left:-2.5px; border-radius:50%; background:var(--accent); }
+  .day.today .dot { background:#1B2A41; }
+  #panel { flex:1; min-height:0; display:flex; flex-direction:column; gap:6px; border-top:1px solid rgba(255,255,255,.15); padding-top:8px; }
+  #panel h2 { margin:0; font-size:14px; color:var(--muted); font-weight:500; }
+  #list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+  .ev { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,.1); border-radius:8px; padding:5px 8px; font-size:14px; }
+  .ev span { flex:1; word-break:break-all; }
+  .ev .t { flex:none; color:var(--accent); }
+  .ev button { padding:0 7px; }
+  form { display:flex; gap:4px; }
+  input[type=text], input[type=time] { background:rgba(255,255,255,.12); color:var(--fg); border:0; border-radius:8px; padding:6px 8px; font-size:14px; min-width:0; }
+  input[type=text] { flex:1; }
+  #settings { display:none; flex-direction:column; gap:6px; font-size:13px; background:rgba(255,255,255,.08); border-radius:8px; padding:8px; }
+  #settings label { display:flex; align-items:center; gap:8px; }
+  #settings input[type=range] { flex:1; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <button id="prev">◀</button>
+    <h1 id="title"></h1>
+    <button id="next">▶</button>
+    <button id="todayBtn">오늘</button>
+    <button id="gear">⚙</button>
+  </header>
+  <div id="settings">
+    <label>투명도 <input type="range" id="opacity" min="20" max="100"></label>
+    <label><input type="checkbox" id="mon"> 월요일부터 시작</label>
+    <label><input type="checkbox" id="auto"> 컴퓨터 켤 때 자동 실행</label>
+    <button id="quit">프로그램 종료</button>
+  </div>
+  <div class="grid" id="dows"></div>
+  <div class="grid" id="days"></div>
+  <div id="panel">
+    <h2 id="selLabel"></h2>
+    <div id="list"></div>
+    <form id="form">
+      <input type="time" id="time">
+      <input type="text" id="text" placeholder="일정 입력 후 Enter" maxlength="100">
+    </form>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const DOW = ['일','월','화','수','목','금','토'];
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+let events = load('events', {});          // { 'YYYY-MM-DD': [{text, time}] }
+let cfg = load('cfg', { opacity: 85, mon: false });
+let view = new Date(); view.setDate(1);
+const key = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+let selected = key(new Date());
+
+function applyCfg() {
+  document.documentElement.style.setProperty('--bg', `rgba(27,42,65,${cfg.opacity/100})`);
+  $('opacity').value = cfg.opacity; $('mon').checked = cfg.mon;
+}
+
+function render() {
+  $('title').textContent = `${view.getFullYear()}년 ${view.getMonth()+1}월`;
+  const order = cfg.mon ? [1,2,3,4,5,6,0] : [0,1,2,3,4,5,6];
+  $('dows').innerHTML = order.map(i => `<div class="dow" style="${i===0?'color:#FF9B8A':''}">${DOW[i]}</div>`).join('');
+  const first = new Date(view.getFullYear(), view.getMonth(), 1);
+  const offset = (first.getDay() - (cfg.mon ? 1 : 0) + 7) % 7;
+  const start = new Date(first); start.setDate(1 - offset);
+  const todayKey = key(new Date());
+  let html = '';
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const k = key(d);
+    const cls = ['day', d.getMonth() !== view.getMonth() && 'other', d.getDay()===0 && 'sun', k===todayKey && 'today', k===selected && 'sel'].filter(Boolean).join(' ');
+    html += `<div class="${cls}" data-k="${k}">${d.getDate()}${(events[k]||[]).length ? '<i class="dot"></i>' : ''}</div>`;
+  }
+  $('days').innerHTML = html;
+  renderList();
+}
+
+function renderList() {
+  const [y, m, d] = selected.split('-').map(Number);
+  $('selLabel').textContent = `${m}월 ${d}일 (${DOW[new Date(y, m-1, d).getDay()]}) 일정`;
+  const list = (events[selected] || []).slice().sort((a, b) => (a.time||'99').localeCompare(b.time||'99'));
+  $('list').innerHTML = list.length ? '' : '<div style="color:#9FB0C8;font-size:13px">일정이 없습니다</div>';
+  list.forEach(ev => {
+    const row = document.createElement('div'); row.className = 'ev';
+    if (ev.time) { const t = document.createElement('b'); t.className = 't'; t.textContent = ev.time; row.append(t); }
+    const s = document.createElement('span'); s.textContent = ev.text; row.append(s);
+    const b = document.createElement('button'); b.textContent = '✕';
+    b.onclick = () => { events[selected] = events[selected].filter(e => e !== ev && !(e.text===ev.text && e.time===ev.time)); if (!events[selected].length) delete events[selected]; save('events', events); render(); };
+    row.append(b); $('list').append(row);
+  });
+}
+
+$('days').addEventListener('click', e => {
+  const el = e.target.closest('.day'); if (!el) return;
+  selected = el.dataset.k;
+  const [y, m] = selected.split('-').map(Number);
+  if (m-1 !== view.getMonth()) view = new Date(y, m-1, 1);
+  render();
+});
+$('prev').onclick = () => { view.setMonth(view.getMonth()-1); render(); };
+$('next').onclick = () => { view.setMonth(view.getMonth()+1); render(); };
+$('todayBtn').onclick = () => { selected = key(new Date()); view = new Date(); view.setDate(1); render(); };
+$('gear').onclick = () => { const s = $('settings'); s.style.display = s.style.display === 'flex' ? 'none' : 'flex'; };
+$('form').onsubmit = e => {
+  e.preventDefault();
+  const text = $('text').value.trim(); if (!text) return;
+  (events[selected] = events[selected] || []).push({ text, time: $('time').value, notified: false });
+  save('events', events); $('text').value = ''; $('time').value = ''; render();
+};
+$('opacity').oninput = e => { cfg.opacity = +e.target.value; save('cfg', cfg); applyCfg(); };
+$('mon').onchange = e => { cfg.mon = e.target.checked; save('cfg', cfg); render(); };
+$('quit').onclick = () => window.api.quit();
+window.api.getAutostart().then(v => $('auto').checked = v);
+$('auto').onchange = e => window.api.setAutostart(e.target.checked);
+
+// 시간이 지정된 일정 알림 (프로그램이 켜져 있을 때)
+setInterval(() => {
+  const now = new Date(), k = key(now);
+  const hm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  (events[k] || []).forEach(ev => {
+    if (ev.time === hm && !ev.notified) { ev.notified = true; save('events', events); window.api.notify('일정 알림', ev.text); }
+  });
+  if (key(new Date()) !== todayKeyCache) { todayKeyCache = key(new Date()); render(); }
+}, 15000);
+let todayKeyCache = key(new Date());
+
+applyCfg(); render();
+</script>
+</body>
+</html>
