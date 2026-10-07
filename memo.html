@@ -32,6 +32,15 @@
   #text table { border-collapse:collapse; width:100%; margin:6px 0; table-layout:fixed; }
   #text td { border:1px solid color-mix(in srgb, var(--ink) 40%, transparent); padding:3px 6px; vertical-align:top; min-width:30px; font-size:15px; }
   #text tr:first-child td { font-weight:700; background:rgba(0,0,0,.06); }
+  /* 체크리스트: 글머리 자리에 네모 상자를 그리고, 누르면 체크 */
+  #text ul.chk { list-style:none; padding-left:0; margin:4px 0; }
+  #text ul.chk li { position:relative; padding-left:26px; min-height:1.55em; }
+  #text ul.chk li::before { content:''; position:absolute; left:2px; top:.22em; width:15px; height:15px; border-radius:4px;
+                            border:2px solid color-mix(in srgb, var(--ink) 65%, transparent); cursor:pointer; box-sizing:border-box; }
+  #text ul.chk li[data-done="1"]::before { background:color-mix(in srgb, var(--ink) 75%, transparent); border-color:transparent; }
+  #text ul.chk li[data-done="1"]::after { content:''; position:absolute; left:7px; top:.36em; width:5px; height:9px;
+                            border:solid var(--chk); border-width:0 2.5px 2.5px 0; transform:rotate(45deg); pointer-events:none; }
+  #text ul.chk li[data-done="1"] { text-decoration:line-through; opacity:.55; }
   #text td.cur { box-shadow:inset 0 0 0 2px color-mix(in srgb, var(--ink) 55%, transparent); }
   /* 표 편집 도구 (표 안에 있을 때만 보임) */
   #ttools { display:none; position:absolute; z-index:3; gap:2px; background:#2B2F36; border-radius:8px; padding:3px; box-shadow:0 4px 12px rgba(0,0,0,.35); }
@@ -56,12 +65,14 @@
   <div id="paper">
     <div class="bar">
       <div class="title" id="title"></div>
-      <div id="dots" style="display:flex;gap:5px"></div>
+      <button id="colorBtn" title="메모 색"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.9 1.4-1.9-.5-1.1.3-2.1 1.5-2.1H17a4 4 0 0 0 4-4c0-5-4-10-9-10z"/><circle cx="7.5" cy="11" r="1.3" fill="currentColor"/><circle cx="10.5" cy="7" r="1.3" fill="currentColor"/><circle cx="15" cy="7.5" r="1.3" fill="currentColor"/></svg></button>
+      <button id="chkBtn" title="체크리스트 넣기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.5"/><path d="M4.8 7.6l1.5 1.5 2.4-3"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M13 7.5h8M13 17.5h8"/></svg></button>
       <button id="tableBtn" title="표 넣기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg></button>
       <button id="opBtn" title="메모 투명도"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
       <button id="lockBtn" title="메모 위치·크기 잠금 (달력 잠금과 별도)"></button>
       <button id="hide" title="메모 창 숨기기 (달력 위 [메모] 버튼으로 다시 열기)">✕</button>
     </div>
+    <div class="opbar" id="colorbar">종이 색 <div id="dots" style="display:flex;gap:6px"></div></div>
     <div class="opbar" id="opbar">투명도 <input type="range" id="opacity" min="15" max="100"><span id="opVal"></span></div>
     <div id="text" contenteditable="true" spellcheck="false" data-ph="여기에 메모를 적으세요"></div>
   </div>
@@ -103,11 +114,13 @@ function applyOpacity() {
   const a = memoCfg.opacity / 100, s = document.documentElement.style;
   const see = a < 0.6;
   s.setProperty('--ink', see ? '#FFFFFF' : '#3A3220');
+  s.setProperty('--chk', see ? '#3A3220' : 'var(--paper-solid, #FFE88A)');   // 체크 표시는 상자 색과 반대로
   s.setProperty('--ts', see ? '0 0 3px rgba(0,0,0,.95), 0 1px 2px rgba(0,0,0,.9)' : 'none');
   s.setProperty('--shadow', `rgba(0,0,0,${(0.35 * a).toFixed(2)})`);
   $('opacity').value = memoCfg.opacity; $('opVal').textContent = memoCfg.opacity + '%';
 }
 $('opBtn').onclick = () => { $('opbar').classList.toggle('open'); $('opBtn').classList.toggle('on'); };
+$('colorBtn').onclick = () => { $('colorbar').classList.toggle('open'); $('colorBtn').classList.toggle('on'); };
 $('opacity').oninput = e => { memoCfg.opacity = +e.target.value; save('memoCfg', memoCfg); applyOpacity(); render(); };
 
 // 메모 잠금 (달력 잠금과 별도)
@@ -127,6 +140,8 @@ function render() {
   document.documentElement.style.setProperty('--paper', paperOf(m.color));
   if (ed.dataset.id !== m.id || cleanHtml() !== m.html) { ed.innerHTML = m.html; ed.dataset.id = m.id; hideTools(); }
   $('title').textContent = m.title;
+  document.documentElement.style.setProperty('--paper-solid', m.color);
+  updateCount();
   // 종이 색
   const dots = $('dots'); dots.innerHTML = '';
   MEMO_COLORS.forEach(c => {
@@ -175,7 +190,7 @@ const cleanHtml = () => ed.innerHTML.replace(/ class="cur"/g, '');   // 커서 �
 function saveText() {
   const m = cur();
   // 다 지웠을 때 남는 빈 줄바꿈은 비워서 안내 문구가 다시 보이게
-  if (ed.innerText.trim() === '' && !ed.querySelector('table')) ed.innerHTML = '';
+  if (ed.innerText.trim() === '' && !ed.querySelector('table, ul.chk')) ed.innerHTML = '';
   m.html = cleanHtml(); m.text = ed.innerText; touch(m); saveMemos();
 }
 ed.addEventListener('input', saveText);
@@ -263,6 +278,58 @@ ed.addEventListener('keydown', e => {
   tr.after(nr); placeCaret(nr.cells[0]); saveText();
 });
 $('tableBtn').onclick = () => insertTable();
+
+// ── 체크리스트 ──
+// <ul class="chk"><li data-done="1">…</li></ul> 모양. Enter = 다음 항목, 빈 항목에서 Enter = 목록 끝내기(브라우저 기본 동작)
+function insertChecklist() {
+  ed.focus();
+  if (!caretInEditor()) {
+    const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false);
+    getSelection().removeAllRanges(); getSelection().addRange(r);
+  }
+  // 이미 체크리스트 안이면 항목 하나 더
+  const li = curItem();
+  if (li) { const n = document.createElement('li'); n.innerHTML = '<br>'; li.after(n); placeCaret(n); saveText(); return; }
+  document.execCommand('insertHTML', false, '<ul class="chk"><li id="__newchk"><br></li></ul>');
+  const n = document.getElementById('__newchk');
+  if (n) { n.removeAttribute('id'); placeCaret(n); }
+  saveText();
+}
+const curItem = () => {
+  const sel = getSelection(); if (!sel.rangeCount) return null;
+  let n = sel.anchorNode; if (n && n.nodeType === 3) n = n.parentNode;
+  const li = n && n.closest && n.closest('ul.chk > li');
+  return li && ed.contains(li) ? li : null;
+};
+// 네모 상자(항목 왼쪽 26px)를 누르면 체크/해제
+ed.addEventListener('mousedown', e => {
+  const li = e.target.closest && e.target.closest('ul.chk > li');
+  if (!li || !ed.contains(li)) return;
+  const x = e.clientX - li.getBoundingClientRect().left;
+  if (x > 24) return;
+  e.preventDefault();
+  li.dataset.done = li.dataset.done === '1' ? '0' : '1';
+  saveText(); updateCount();
+});
+// Enter 로 새 항목이 생길 때 "체크됨" 이 따라오지 않게
+ed.addEventListener('beforeinput', e => {
+  if (e.inputType === 'insertParagraph' && curItem()) newItemPending = true;
+});
+let newItemPending = false;
+ed.addEventListener('input', e => {
+  if (!newItemPending) return;
+  newItemPending = false;
+  const li = curItem();
+  if (li && li.textContent === '' && li.hasAttribute('data-done')) { li.removeAttribute('data-done'); saveText(); }
+});
+// 제목 줄에 "체크 3/5" 처럼 진행 상황 보여 주기
+function updateCount() {
+  const all = ed.querySelectorAll('ul.chk > li'), done = ed.querySelectorAll('ul.chk > li[data-done="1"]');
+  const m = cur();
+  $('title').textContent = m.title + (all.length ? `${m.title ? ' · ' : ''}✔ ${done.length}/${all.length}` : '');
+}
+ed.addEventListener('input', updateCount);
+$('chkBtn').onclick = insertChecklist;
 $('hide').onclick = () => window.api.setMemoVisible(false);
 
 // 다른 창에서 메모가 바뀌면 다시 그리기
