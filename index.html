@@ -55,6 +55,26 @@
   body.moving, body.moving * { cursor:grabbing !important; }
   body.moving .chip.src { opacity:.35; }
   .day.drop { box-shadow:inset 0 0 0 2px var(--accent); background:color-mix(in srgb, var(--accent) 22%, transparent); }
+  /* 일정 띠 양 끝을 끌어서 날짜 늘이기·줄이기 */
+  .chip { position:relative; }
+  .chip .h { position:absolute; top:0; bottom:0; width:8px; cursor:ew-resize; }
+  .chip .h.hs { left:0; } .chip .h.he { right:0; }
+  .chip:hover .h { background:rgba(0,0,0,.18); }
+  body.resizing, body.resizing * { cursor:ew-resize !important; }
+  /* 목록에서 날짜·시간 고치기 */
+  .ev .meta { cursor:pointer; }
+  .ev .meta:hover { text-decoration:underline; }
+  .dedit { display:flex; flex-direction:column; gap:5px; margin:2px 0 4px; }
+  .dedit > div { display:flex; align-items:center; gap:4px; }
+  .dedit input { flex:1; min-width:0; background:var(--soft); color:var(--fg); border:1px solid var(--accent); border-radius:6px; padding:3px 4px; font-size:13px; font-family:inherit; }
+  .dedit input::-webkit-calendar-picker-indicator { margin-left:0; }
+  .dedit button { padding:3px 8px; font-size:12px; }
+  .dedit button.ok { background:var(--accent); color:#1B2A41; text-shadow:none; }
+  /* 배경 투명도 (달력 위에 바로) */
+  .opq { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); margin-left:auto; }
+  .opq svg { width:16px; height:16px; }
+  .opq input { width:110px; }
+  .opq span { width:36px; text-align:right; font-variant-numeric:tabular-nums; }
   /* 검색 · 색 보기 */
   .tools { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   .search { display:flex; align-items:center; gap:6px; background:var(--soft); border-radius:8px; padding:0 8px; flex:0 1 260px; min-width:150px; }
@@ -136,6 +156,10 @@
         <button id="qClear" type="button" title="검색 지우기">✕</button>
       </div>
       <div class="cfilter" id="cfilter"></div>
+      <label class="opq" title="배경 투명도 (낮을수록 바탕화면이 비쳐 보여요)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
+        투명도 <input type="range" id="opacity2" min="10" max="100"><span id="opVal"></span>
+      </label>
     </div>
     <div class="dows" id="dows"></div>
     <div class="days" id="days"></div>
@@ -226,7 +250,7 @@ let selStart = key(new Date()), selEnd = selStart;
 
 function applyCfg() {
   applyTheme(cfg);
-  $('opacity').value = cfg.opacity; $('mon').checked = cfg.mon; $('shadow').checked = cfg.shadow;
+  $('opacity').value = cfg.opacity; $('opacity2').value = cfg.opacity; $('opVal').textContent = cfg.opacity + '%'; $('mon').checked = cfg.mon; $('shadow').checked = cfg.shadow;
   const set = (k) => (c) => { cfg[k] = c; save('cfg', cfg); applyCfg(); };
   swatches('bgSw', BG_COLORS, cfg.bg, set('bg'));
   swatches('fgSw', FG_COLORS, cfg.fg, set('fg'), true);
@@ -299,7 +323,10 @@ function render() {
       c.className = 'chip' + (multi && k > ev.start && !rowStart ? ' cl' : '') + (multi && k < ev.end && !rowEnd ? ' cr' : '');
       c.style.background = ev.color; c.style.color = isLight(ev.color) ? '#1B2A41' : '#F6F4EE';
       c.textContent = (!multi || k === ev.start || rowStart) ? (ev.time && k === ev.start ? ev.time + ' ' : '') + ev.text : ' ';
-      c.title = ev.text + '\n끌어서 다른 날짜로 옮기기 · 더블클릭해서 이름 수정'; c.dataset.id = ev.id;
+      c.title = ev.text + '\n끌어서 다른 날짜로 옮기기 · 양 끝을 끌어서 기간 바꾸기 · 더블클릭해서 이름 수정'; c.dataset.id = ev.id;
+      // 시작 날/끝 날 칸에는 끌어서 날짜를 바꾸는 손잡이
+      if (k === ev.start) { const h = document.createElement('span'); h.className = 'h hs'; h.dataset.edge = 'start'; c.append(h); }
+      if (k === ev.end) { const h = document.createElement('span'); h.className = 'h he'; h.dataset.edge = 'end'; c.append(h); }
       cell.append(c);
     });
     if (list.length > 3) { const m = document.createElement('div'); m.className = 'more'; m.textContent = `+${list.length - 3}개 더`; cell.append(m); }
@@ -347,8 +374,10 @@ function renderSide() {
   list.forEach(ev => {
     const row = document.createElement('div'); row.className = 'ev' + (searching ? ' result' : ''); row.style.borderLeftColor = ev.color;
     const info = document.createElement('div'); info.className = 'info';
-    const meta = [ev.start !== ev.end ? `${fmt(ev.start)} ~ ${fmt(ev.end)}` : (a !== b || searching ? fmt(ev.start) : ''), ev.time].filter(Boolean).join(' · ');
-    if (meta) { const m = document.createElement('div'); m.className = 'meta'; m.textContent = meta; info.append(m); }
+    // 날짜 줄은 항상 보여 주고, 더블클릭하면 날짜·시간을 고칠 수 있다
+    const meta = [ev.start !== ev.end ? `${fmt(ev.start)} ~ ${fmt(ev.end)}` : fmt(ev.start), ev.time].filter(Boolean).join(' · ');
+    const m = document.createElement('div'); m.className = 'meta'; m.textContent = '📅 ' + meta; m.title = '더블클릭해서 날짜·시간 수정';
+    info.append(m);
     const t = document.createElement('div'); t.className = 'txt'; highlight(t, ev.text);
     // 검색 결과를 누르면 그 날짜로 이동
     if (searching) row.onclick = e => {
@@ -359,7 +388,10 @@ function renderSide() {
     // 더블클릭하면 그 자리에서 이름 고치기
     const edit = () => inlineEdit(t, ev.text, { onDone: v => { if (v) { ev.text = v; touch(ev); saveEvents(); } render(); } });
     row.title = '더블클릭해서 이름 수정'; row.dataset.id = ev.id; row._edit = edit;
-    row.ondblclick = e => { if (!e.target.closest('button, input')) edit(); };
+    row.ondblclick = e => {
+      if (e.target.closest('button, input, .dedit')) return;
+      if (e.target.closest('.meta')) editDates(ev, m); else edit();
+    };
     info.append(t); row.append(info);
     const del = document.createElement('button'); del.textContent = '삭제';
     del.onclick = () => { ev.deleted = true; touch(ev); saveEvents(); render(); };
@@ -367,16 +399,49 @@ function renderSide() {
   });
 }
 
+// 목록에서 일정의 날짜·시간 고치기
+function editDates(ev, el) {
+  const box = document.createElement('div'); box.className = 'dedit';
+  const mk = (type, v, title) => { const i = document.createElement('input'); i.type = type; i.value = v; i.title = title; return i; };
+  const s = mk('date', ev.start, '시작일'), e = mk('date', ev.end, '종료일'), t = mk('time', ev.time || '', '시간 (비우면 시간 없음)');
+  const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'ok'; ok.textContent = '저장';
+  const no = document.createElement('button'); no.type = 'button'; no.textContent = '취소';
+  const r1 = document.createElement('div'), r2 = document.createElement('div');
+  r1.append(s, '~', e); r2.append(t, ok, no); box.append(r1, r2);
+  el.replaceWith(box); s.focus();
+  // 시작일을 종료일 뒤로 바꾸면 종료일도 따라간다
+  s.onchange = () => { if (s.value && e.value && e.value < s.value) e.value = s.value; };
+  const finish = (yes) => {
+    if (yes && s.value) {
+      let a = s.value, b = e.value || s.value; if (b < a) [a, b] = [b, a];
+      if (a !== ev.start || b !== ev.end || t.value !== (ev.time || '')) {
+        ev.start = a; ev.end = b; ev.time = t.value; touch(ev); saveEvents();
+        localStorage.removeItem('notified:' + ev.id);
+      }
+    }
+    render();
+  };
+  ok.onclick = () => finish(true); no.onclick = () => finish(false);
+  box.onkeydown = k => { if (k.key === 'Enter') finish(true); if (k.key === 'Escape') finish(false); };
+}
+
 // 날짜 더하기 (YYYY-MM-DD)
 const addDays = (k, n) => { const d = parse(k); d.setDate(d.getDate() + n); return key(d); };
 const diffDays = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
 
-// 일정 띠 끌어서 다른 날짜로 옮기기: { ev, from(잡은 날), delta(옮길 날 수) }
+// 일정 띠 끌기: { ev, mode: 'move'(통째로 옮기기) | 'start' | 'end'(한쪽 끝만), from(잡은 날), over(지금 마우스가 있는 날) }
 let moving = null;
+// 끌기가 끝나면 바뀔 기간
+function movedRange() {
+  const { ev, mode, from, over } = moving;
+  if (mode === 'move') { const d = diffDays(from, over); return [addDays(ev.start, d), addDays(ev.end, d)]; }
+  if (mode === 'start') return [over <= ev.end ? over : ev.end, ev.end];
+  return [ev.start, over >= ev.start ? over : ev.start];
+}
 function showDrop() {
-  const ev = moving.ev, s0 = addDays(ev.start, moving.delta), s1 = addDays(ev.end, moving.delta);
-  document.querySelectorAll('#days .day').forEach(c => c.classList.toggle('drop', moving.delta !== 0 && c.dataset.k >= s0 && c.dataset.k <= s1));
-  document.querySelectorAll('#days .chip').forEach(c => c.classList.toggle('src', moving.delta !== 0 && c.dataset.id === ev.id));
+  const ev = moving.ev, [s0, s1] = movedRange(), changed = s0 !== ev.start || s1 !== ev.end;
+  document.querySelectorAll('#days .day').forEach(c => c.classList.toggle('drop', changed && c.dataset.k >= s0 && c.dataset.k <= s1));
+  document.querySelectorAll('#days .chip').forEach(c => c.classList.toggle('src', changed && c.dataset.id === ev.id));
 }
 
 // 날짜 클릭 / 끌어서 여러 날 선택
@@ -396,15 +461,19 @@ $('days').addEventListener('mousedown', e => {
   }
   if (chip) {   // 일정 띠를 잡으면: 끌면 옮기기, 그냥 놓으면 그 날짜 고르기
     const ev = events.find(x => x.id === chip.dataset.id);
-    if (ev) { e.preventDefault(); moving = { ev, from: el.dataset.k, delta: 0 }; return; }
+    const edge = e.target.closest('.h');
+    if (ev) { e.preventDefault(); moving = { ev, mode: edge ? edge.dataset.edge : 'move', from: el.dataset.k, over: el.dataset.k }; return; }
   }
   dragging = true; selStart = selEnd = el.dataset.k; render();
 });
 $('days').addEventListener('mouseover', e => {
   if (moving) {
     const el = e.target.closest('.day'); if (!el) return;
-    const d = diffDays(moving.from, el.dataset.k);
-    if (d !== moving.delta) { moving.delta = d; document.body.classList.toggle('moving', d !== 0); showDrop(); }
+    if (el.dataset.k !== moving.over) {
+      moving.over = el.dataset.k;
+      document.body.classList.toggle(moving.mode === 'move' ? 'moving' : 'resizing', moving.over !== moving.from);
+      showDrop();
+    }
     return;
   }
   if (!dragging) return;
@@ -413,11 +482,12 @@ $('days').addEventListener('mouseover', e => {
 });
 window.addEventListener('mouseup', () => {
   if (moving) {
-    const { ev, from, delta } = moving; moving = null;
-    document.body.classList.remove('moving');
-    if (delta) {
-      ev.start = addDays(ev.start, delta); ev.end = addDays(ev.end, delta); touch(ev); saveEvents();
-      selStart = selEnd = addDays(from, delta);
+    const [s0, s1] = movedRange(), { ev, from, over, mode } = moving; moving = null;
+    document.body.classList.remove('moving', 'resizing');
+    if (s0 !== ev.start || s1 !== ev.end) {
+      lastChip.id = null;   // 끌기 다음에 바로 누른 것은 더블클릭으로 치지 않는다
+      ev.start = s0; ev.end = s1; touch(ev); saveEvents();
+      selStart = selEnd = mode === 'move' ? over : (mode === 'start' ? s0 : s1);
       localStorage.removeItem('notified:' + ev.id);   // 날짜가 바뀌었으니 알림 다시
     } else {
       selStart = selEnd = from;
@@ -452,7 +522,7 @@ $('form').onsubmit = e => {
   events.push(touch({ id: uid(), text, start: a, end: b, time: $('time').value, color: cfg.evColor }));
   saveEvents(); $('text').value = ''; $('time').value = ''; render();
 };
-$('opacity').oninput = e => { cfg.opacity = +e.target.value; save('cfg', cfg); applyCfg(); };
+$('opacity').oninput = $('opacity2').oninput = e => { cfg.opacity = +e.target.value; save('cfg', cfg); applyCfg(); };
 $('mon').onchange = e => { cfg.mon = e.target.checked; save('cfg', cfg); render(); };
 $('shadow').onchange = e => { cfg.shadow = e.target.checked; save('cfg', cfg); applyCfg(); };
 $('quit').onclick = () => window.api.quit();
