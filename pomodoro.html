@@ -4,100 +4,203 @@
 <meta charset="utf-8">
 <title>뽀모도로</title>
 <style>
-  :root { --base: 27,42,65; --fg:#F6F4EE; --ring:#E8574F;
-          --muted: color-mix(in srgb, var(--fg) 65%, transparent); --soft: color-mix(in srgb, var(--fg) 12%, transparent); }
+  :root { --play: rgba(232,128,122,.85); }
   * { box-sizing: border-box; }
-  html, body { margin:0; height:100%; background:transparent; font-family:'Malgun Gothic','Segoe UI',sans-serif; color:var(--fg); user-select:none; overflow:hidden; }
-  #card { position:absolute; inset:4px; border-radius:16px; background:rgba(var(--base), .96); box-shadow:0 4px 16px rgba(0,0,0,.4);
-          display:flex; flex-direction:column; align-items:center; padding:0 14px 12px; }
+  html, body { margin:0; height:100%; background:transparent; font-family:'Malgun Gothic','Segoe UI',sans-serif; color:#fff; user-select:none; overflow:hidden; }
+  #card { position:absolute; inset:4px; border-radius:20px; overflow:hidden; box-shadow:0 6px 20px rgba(0,0,0,.45); }
+  /* ── 배경 (옛날 MP3 "Now Playing" 같은 흐릿한 색 번짐) ── */
+  #bg, #bgImg, #glow { position:absolute; inset:-30px; }
+  #bgImg { background-size:cover; background-position:center; display:none; }
+  #glow { background:
+      radial-gradient(40% 35% at 18% 30%, rgba(255,255,255,.35), transparent 70%),
+      radial-gradient(35% 30% at 85% 20%, rgba(255,255,255,.22), transparent 70%),
+      radial-gradient(45% 40% at 70% 85%, rgba(255,255,255,.15), transparent 70%);
+    filter:blur(18px); }
+  #shade { position:absolute; inset:0; background:rgba(0,0,0,.12); }
+  #ui { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; padding:0 22px 14px; text-shadow:0 1px 3px rgba(0,0,0,.25); }
+
   /* 위쪽 띠: 끌어서 창 이동 */
-  .bar { width:calc(100% + 28px); height:34px; display:flex; align-items:center; gap:4px; padding:0 8px 0 12px; -webkit-app-region:drag; flex:none; }
-  .bar .t { flex:1; font-size:13px; font-weight:700; opacity:.85; }
-  button { -webkit-app-region:no-drag; font-family:inherit; cursor:pointer; border:0; color:var(--fg); }
-  .ib { width:26px; height:26px; border-radius:6px; background:transparent; display:flex; align-items:center; justify-content:center; padding:0; opacity:.75; }
-  .ib:hover { background:var(--soft); opacity:1; }
-  .ib.on { background:var(--soft); opacity:1; }
-  .ib svg { width:15px; height:15px; }
-  #close:hover { background:#E81123; }
-  /* 집중 / 짧은 휴식 / 긴 휴식 */
-  .modes { display:flex; gap:4px; background:var(--soft); border-radius:10px; padding:3px; margin-top:2px; flex:none; }
-  .modes button { background:transparent; font-size:12px; padding:5px 9px; border-radius:7px; opacity:.75; }
-  .modes button.on { background:var(--ring); color:#fff; opacity:1; font-weight:700; }
-  /* 동그란 진행 표시 */
-  .dial { position:relative; width:170px; height:170px; margin:12px 0 8px; flex:none; }
-  .dial svg { width:100%; height:100%; transform:rotate(-90deg); }
-  .dial .track { stroke:var(--soft); }
-  .dial .prog { stroke:var(--ring); stroke-linecap:round; transition:stroke-dashoffset .3s linear; }
-  .time { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-  .time b { font-size:40px; font-weight:700; letter-spacing:1px; font-variant-numeric:tabular-nums; }
-  .time span { font-size:12px; color:var(--muted); margin-top:2px; }
-  #task { width:100%; background:var(--soft); border:0; border-radius:8px; color:var(--fg); font-size:13px; padding:7px 10px; outline:none; font-family:inherit; text-align:center; flex:none; }
-  #task::placeholder { color:var(--muted); }
-  .ctrl { display:flex; gap:10px; align-items:center; margin-top:10px; flex:none; }
-  .round { width:38px; height:38px; border-radius:50%; background:var(--soft); display:flex; align-items:center; justify-content:center; padding:0; }
-  .round:hover { filter:brightness(1.3); }
-  .round svg { width:16px; height:16px; }
-  #start { width:56px; height:56px; background:var(--ring); color:#fff; }
-  #start svg { width:22px; height:22px; }
-  .foot { margin-top:auto; padding-top:8px; width:100%; display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--muted); flex:none; }
-  .dots { display:flex; gap:4px; }
-  .dots i { width:8px; height:8px; border-radius:50%; background:var(--soft); }
-  .dots i.done { background:var(--ring); }
-  /* 시간 설정 */
-  #setup { display:none; position:absolute; inset:38px 10px 10px; background:rgba(var(--base), .99); border-radius:12px; padding:12px; flex-direction:column; gap:9px; font-size:13px; border:1px solid var(--soft); }
+  .bar { width:calc(100% + 44px); height:48px; display:flex; align-items:center; padding:0 12px; -webkit-app-region:drag; flex:none; }
+  .bar .t { flex:1; text-align:center; font-size:15px; font-weight:600; letter-spacing:.3px; }
+  button { -webkit-app-region:no-drag; font-family:inherit; cursor:pointer; border:0; color:#fff; background:transparent; padding:0; }
+  .ib { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; opacity:.9; }
+  .ib:hover { background:rgba(255,255,255,.18); opacity:1; }
+  .ib.on { background:rgba(255,255,255,.25); }
+  .ib svg { width:20px; height:20px; }
+
+  /* 레코드판 */
+  .disc { width:150px; height:150px; margin-top:6px; flex:none; position:relative; }
+  .disc svg { width:100%; height:100%; overflow:visible; }
+  .disc .spin { transform-origin:50% 50%; animation:spin 6s linear infinite; animation-play-state:paused; }
+  body.running .disc .spin { animation-play-state:running; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .disc .arm { transform-origin:84px 50px; transition:transform .6s ease; transform:rotate(-18deg); }
+  body.running .disc .arm { transform:rotate(0deg); }
+
+  .title { margin-top:16px; font-size:24px; font-weight:400; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sub { font-size:14px; opacity:.6; margin-top:2px; }
+  .modes { display:flex; gap:6px; margin-top:12px; }
+  .modes button { font-size:12px; padding:4px 10px; border-radius:12px; background:rgba(255,255,255,.14); opacity:.8; }
+  .modes button.on { background:rgba(255,255,255,.85); color:#5a4a6a; opacity:1; text-shadow:none; font-weight:700; }
+
+  /* 진행 막대: 왼쪽 = 지난 시간, 오른쪽 = 남은 시간 */
+  .prog { width:100%; display:flex; align-items:center; gap:10px; margin-top:18px; font-size:12px; font-variant-numeric:tabular-nums; }
+  .prog span { width:40px; opacity:.85; }
+  .prog span:last-child { text-align:right; }
+  .track { flex:1; height:6px; border-radius:3px; background:rgba(255,255,255,.35); position:relative; }
+  .fill { position:absolute; left:0; top:0; bottom:0; border-radius:3px; background:#fff; width:0; transition:width .25s linear; }
+  .knob { position:absolute; top:-5px; width:3px; height:16px; background:#fff; border-radius:2px; transform:translateX(-1px); transition:left .25s linear; }
+  .remain { margin-top:8px; font-size:13px; opacity:.9; }
+
+  #task { margin-top:10px; width:100%; background:rgba(255,255,255,.16); border:0; border-radius:18px; color:#fff; font-size:13px; padding:7px 14px;
+          outline:none; font-family:inherit; text-align:center; text-shadow:none; }
+  #task::placeholder { color:rgba(255,255,255,.65); }
+
+  .ctrl { display:flex; gap:22px; align-items:center; margin-top:14px; }
+  .round { width:52px; height:52px; border-radius:50%; background:rgba(255,255,255,.28); display:flex; align-items:center; justify-content:center; }
+  .round:hover { background:rgba(255,255,255,.4); }
+  .round svg { width:22px; height:22px; }
+  #start { width:72px; height:72px; background:var(--play); box-shadow:0 4px 14px rgba(0,0,0,.15); }
+  #start:hover { filter:brightness(1.08); }
+  #start svg { width:30px; height:30px; }
+
+  .foot { margin-top:auto; width:100%; display:flex; align-items:center; justify-content:space-between; font-size:12px; opacity:.85; }
+  .dots { display:flex; gap:5px; }
+  .dots i { width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.35); }
+  .dots i.done { background:#fff; }
+
+  /* ≡ 설정 */
+  #setup { display:none; position:absolute; inset:48px 12px 12px; background:rgba(30,26,40,.88); backdrop-filter:blur(8px); border-radius:14px;
+           padding:14px; flex-direction:column; gap:9px; font-size:13px; overflow-y:auto; text-shadow:none; }
   #setup.open { display:flex; }
+  #setup h4 { margin:2px 0 0; font-size:13px; opacity:.7; font-weight:600; }
   #setup label { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  #setup input[type=number] { width:64px; background:var(--soft); border:0; border-radius:6px; color:var(--fg); padding:4px 6px; font-size:13px; font-family:inherit; text-align:right; }
-  #setup .done { margin-top:auto; background:var(--ring); color:#fff; border-radius:8px; padding:7px; font-weight:700; }
+  #setup input[type=number] { width:64px; background:rgba(255,255,255,.12); border:0; border-radius:6px; color:#fff; padding:4px 6px; font-size:13px; font-family:inherit; text-align:right; }
+  #setup input[type=range] { flex:1; }
+  .presets { display:flex; flex-wrap:wrap; gap:8px; }
+  .presets div { width:34px; height:34px; border-radius:50%; cursor:pointer; border:2px solid transparent; }
+  .presets div.on { border-color:#fff; }
+  .row2 { display:flex; gap:6px; align-items:center; }
+  .row2 input[type=color] { width:34px; height:28px; border:0; padding:0; background:none; cursor:pointer; }
+  .sbtn { background:rgba(255,255,255,.14); border-radius:8px; padding:6px 10px; font-size:12px; }
+  .sbtn:hover { background:rgba(255,255,255,.24); }
+  #sDone { margin-top:6px; background:var(--play); border-radius:10px; padding:9px; font-weight:700; font-size:14px; }
+  .note { font-size:11px; opacity:.6; }
 </style>
 </head>
 <body>
 <div id="card">
-  <div class="bar">
-    <span class="t">🍅 뽀모도로</span>
-    <button class="ib" id="setBtn" title="시간 설정"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
-    <button class="ib" id="top" title="항상 위에 두기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.8V5h6v5.8l2.5 3.2h-11z"/></svg></button>
-    <button class="ib" id="close" title="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <div id="bg"></div><div id="bgImg"></div><div id="glow"></div><div id="shade"></div>
+  <div id="ui">
+    <div class="bar">
+      <button class="ib" id="top" title="항상 위에 두기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.8V5h6v5.8l2.5 3.2h-11z"/></svg></button>
+      <div class="t" id="head">Now Focusing</div>
+      <button class="ib" id="setBtn" title="설정 (시간·배경)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <button class="ib" id="close" title="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+
+    <!-- 레코드판: 타이머가 돌면 같이 돈다 -->
+    <div class="disc">
+      <svg viewBox="0 0 100 100" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round">
+        <g class="spin">
+          <circle cx="50" cy="50" r="46"/>
+          <circle cx="50" cy="50" r="10"/>
+          <path d="M50 22a28 28 0 0 0-28 28"/>
+          <path d="M50 31a19 19 0 0 0-19 19"/>
+        </g>
+        <g class="arm"><path d="M84 50v24"/><rect x="80.5" y="54" width="7" height="12" rx="3" fill="none"/><path d="M84 74v8"/></g>
+      </svg>
+    </div>
+
+    <div class="title" id="title">집중</div>
+    <div class="sub" id="sub">Pomodoro</div>
+    <div class="modes" id="modes">
+      <button data-m="focus">집중</button>
+      <button data-m="short">짧은 휴식</button>
+      <button data-m="long">긴 휴식</button>
+    </div>
+
+    <div class="prog"><span id="elapsed">00:00</span><div class="track"><div class="fill" id="fill"></div><div class="knob" id="knob"></div></div><span id="remain">-25:00</span></div>
+    <div class="remain" id="remainText">25분 00초 남았어요</div>
+
+    <input id="task" placeholder="무엇에 집중하나요? (선택)" maxlength="60">
+
+    <div class="ctrl">
+      <button class="round" id="reset" title="처음부터"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M18 5L8 12l10 7z"/><path d="M6 5v14" stroke-linecap="round"/></svg></button>
+      <button class="round" id="start" title="시작"></button>
+      <button class="round" id="skip" title="다음으로 넘기기"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M6 5l10 7-10 7z"/><path d="M18 5v14" stroke-linecap="round"/></svg></button>
+    </div>
+
+    <div class="foot"><span id="today"></span><div class="dots" id="dots"></div></div>
   </div>
-  <div class="modes" id="modes">
-    <button data-m="focus">집중</button>
-    <button data-m="short">짧은 휴식</button>
-    <button data-m="long">긴 휴식</button>
-  </div>
-  <div class="dial">
-    <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45" fill="none" stroke-width="6"/>
-      <circle class="prog" id="prog" cx="50" cy="50" r="45" fill="none" stroke-width="6" stroke-dasharray="282.74" stroke-dashoffset="0"/></svg>
-    <div class="time"><b id="clock">25:00</b><span id="label">집중</span></div>
-  </div>
-  <input id="task" placeholder="무엇에 집중하나요? (선택)" maxlength="60">
-  <div class="ctrl">
-    <button class="round" id="reset" title="처음부터"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v4h4"/></svg></button>
-    <button class="round" id="start" title="시작"></button>
-    <button class="round" id="skip" title="다음으로 넘기기"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 5v14l10-7zM16 5h3v14h-3z"/></svg></button>
-  </div>
-  <div class="foot"><span id="today"></span><div class="dots" id="dots"></div></div>
+
   <div id="setup">
+    <h4>시간</h4>
     <label>집중 (분) <input type="number" id="sFocus" min="1" max="180"></label>
     <label>짧은 휴식 (분) <input type="number" id="sShort" min="1" max="60"></label>
     <label>긴 휴식 (분) <input type="number" id="sLong" min="1" max="120"></label>
     <label>긴 휴식은 집중 몇 번마다 <input type="number" id="sEvery" min="2" max="10"></label>
     <label>끝나면 다음 것 자동 시작 <input type="checkbox" id="sAuto"></label>
     <label>끝날 때 소리 <input type="checkbox" id="sSound"></label>
-    <button class="done" id="sDone">확인</button>
+    <h4>배경 (달력과 따로)</h4>
+    <div class="presets" id="presets"></div>
+    <div class="row2">직접 고르기 <input type="color" id="c1"> <input type="color" id="c2"></div>
+    <div class="row2"><button class="sbtn" id="pickImg">🖼 사진으로</button><button class="sbtn" id="clearImg">사진 지우기</button><input type="file" id="file" accept="image/*" hidden></div>
+    <label>사진 흐리게 <input type="range" id="blur" min="0" max="24"></label>
+    <div class="note">사진은 5MB 이하만 쓸 수 있어요.</div>
+    <button id="sDone">확인</button>
   </div>
 </div>
 <script src="common.js"></script>
 <script>
 const LABEL = { focus: '집중', short: '짧은 휴식', long: '긴 휴식' };
-const COLOR = { focus: '#E8574F', short: '#3FAE7A', long: '#3D8BD9' };
-const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>';
-const PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>';
+const HEAD = { focus: 'Now Focusing', short: 'Short Break', long: 'Long Break' };
+const PLAYCOLOR = { focus: 'rgba(232,128,122,.88)', short: 'rgba(92,184,140,.88)', long: 'rgba(96,150,220,.88)' };
+const PLAY = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M8 4.5v15L20 12z"/></svg>';
+const PAUSE = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="6.5" y="5" width="3.5" height="14" rx="1"/><rect x="14" y="5" width="3.5" height="14" rx="1"/></svg>';
 const key = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
-// 달력과 같은 배경색
-const cal = loadCfg(); document.documentElement.style.setProperty('--base', hexRgb(cal.bg).join(','));
-if (isLight(cal.bg)) document.documentElement.style.setProperty('--fg', '#1B2A41');
+// ── 배경 ──
+const PRESETS = {
+  sunday:   ['#D4575F', '#B9A3C4', '#5D5FA0'],   // 예시 그림 같은 분홍·보라
+  peach:    ['#F6B38E', '#F7D9A8', '#E58C8A'],
+  ocean:    ['#2E6F95', '#5FA8C9', '#3C3B7A'],
+  forest:   ['#3E7D68', '#9BC59D', '#2A4A5C'],
+  lavender: ['#9B8BD6', '#E8C3E6', '#6E7BC9'],
+  night:    ['#2B2E4A', '#5B4C77', '#1B1D2E'],
+};
+const gradient = c => `linear-gradient(160deg, ${c[0]} 0%, ${c[1]} 50%, ${c[2] || c[1]} 100%)`;
+let bg = Object.assign({ preset: 'sunday', c1: '#D4575F', c2: '#5D5FA0', image: null, blur: 10 }, load('pomoBg', {}));
+function applyBg() {
+  const colors = bg.preset === 'custom' ? [bg.c1, bg.c2] : PRESETS[bg.preset] || PRESETS.sunday;
+  $('bg').style.background = gradient(colors);
+  const img = $('bgImg');
+  if (bg.image) { img.style.display = 'block'; img.style.backgroundImage = `url("${bg.image}")`; img.style.filter = `blur(${bg.blur}px)`; }
+  else img.style.display = 'none';
+  $('glow').style.display = bg.image ? 'none' : 'block';
+  $('shade').style.background = bg.image ? 'rgba(0,0,0,.28)' : 'rgba(0,0,0,.12)';
+  // 설정 화면 표시 맞추기
+  document.querySelectorAll('#presets div').forEach(d => d.classList.toggle('on', !bg.image && d.dataset.p === bg.preset));
+  $('c1').value = bg.c1; $('c2').value = bg.c2; $('blur').value = bg.blur;
+}
+const saveBg = () => { try { save('pomoBg', bg); } catch { alert('사진이 너무 커서 저장하지 못했어요. 더 작은 사진을 골라 주세요.'); bg.image = null; save('pomoBg', bg); } applyBg(); };
+Object.entries(PRESETS).forEach(([name, c]) => {
+  const d = document.createElement('div'); d.dataset.p = name; d.style.background = gradient(c); d.title = name;
+  d.onclick = () => { bg.preset = name; bg.image = null; saveBg(); };
+  $('presets').append(d);
+});
+$('c1').oninput = $('c2').oninput = () => { bg.preset = 'custom'; bg.c1 = $('c1').value; bg.c2 = $('c2').value; bg.image = null; saveBg(); };
+$('pickImg').onclick = () => $('file').click();
+$('file').onchange = e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  if (f.size > 5 * 1024 * 1024) { alert('5MB 이하 사진만 쓸 수 있어요.'); return; }
+  const r = new FileReader(); r.onload = () => { bg.image = r.result; saveBg(); }; r.readAsDataURL(f);
+};
+$('clearImg').onclick = () => { bg.image = null; saveBg(); };
+$('blur').oninput = e => { bg.blur = +e.target.value; saveBg(); };
 
+// ── 타이머 ──
 let cfg = Object.assign({ focus: 25, short: 5, long: 15, every: 4, auto: false, sound: true }, load('pomoCfg', {}));
 let mode = 'focus';
 let total = cfg.focus * 60;          // 이번 시간 전체 (초)
@@ -107,24 +210,29 @@ let startedAt = null;                 // 이번 집중을 시작한 시각
 let cycle = load('pomoCycle', 0);     // 긴 휴식 전까지 끝낸 집중 수
 let timer = null;
 
-const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const mmss = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const running = () => !!timer;
 
 function setMode(m, keepRunning) {
   mode = m; total = cfg[m] * 60; left = total; endAt = 0; startedAt = null;
   if (!keepRunning) stop();
-  document.documentElement.style.setProperty('--ring', COLOR[m]);
+  document.documentElement.style.setProperty('--play', PLAYCOLOR[m]);
   draw();
 }
 function draw() {
-  $('clock').textContent = fmt(Math.max(0, Math.ceil(left)));
-  $('label').textContent = LABEL[mode] + (running() ? '' : (left < total ? ' · 멈춤' : ''));
-  $('prog').style.strokeDashoffset = (282.74 * (1 - left / total)).toFixed(2);
+  const remain = Math.max(0, Math.ceil(left)), done = total - remain, pct = total ? done / total * 100 : 0;
+  $('elapsed').textContent = mmss(done);
+  $('remain').textContent = '-' + mmss(remain);
+  $('remainText').textContent = `${Math.floor(remain / 60)}분 ${String(remain % 60).padStart(2, '0')}초 남았어요` + (running() ? '' : (remain < total ? ' · 멈춤' : ''));
+  $('fill').style.width = pct + '%'; $('knob').style.left = pct + '%';
+  $('head').textContent = HEAD[mode];
+  const task = $('task').value.trim();
+  $('title').textContent = task || LABEL[mode];
+  $('sub').textContent = task ? LABEL[mode] : (mode === 'focus' ? `Pomodoro ${cycle + 1} / ${cfg.every}` : 'Break time');
   document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
   $('start').innerHTML = running() ? PAUSE : PLAY; $('start').title = running() ? '일시정지' : '시작';
-  // 창 제목 (작업 표시줄·알림에 쓰임)
-  document.title = running() ? `${fmt(Math.ceil(left))} ${LABEL[mode]}` : '뽀모도로';
-  // 오늘 몇 번 했는지, 긴 휴식까지 남은 수
+  document.body.classList.toggle('running', running());
+  document.title = running() ? `${mmss(remain)} ${LABEL[mode]}` : '뽀모도로';
   const today = live(load('pomoLog', [])).filter(r => r.date === key(new Date()));
   $('today').textContent = `오늘 🍅 ${today.length}회 · ${today.reduce((a, r) => a + r.minutes, 0)}분`;
   $('dots').innerHTML = Array.from({ length: cfg.every }, (_, i) => `<i class="${i < cycle ? 'done' : ''}"></i>`).join('');
@@ -188,24 +296,25 @@ function beep() {
 $('start').onclick = () => running() ? pause() : start();
 $('reset').onclick = () => setMode(mode);
 $('skip').onclick = () => finish(false);
+$('task').oninput = draw;
 document.querySelectorAll('#modes button').forEach(b => b.onclick = () => {
   if (b.dataset.m === mode) return;
   if (running() && !confirm('타이머가 돌아가는 중이에요. 바꿀까요?')) return;
   setMode(b.dataset.m);
 });
 
-// 시간 설정
+// ≡ 설정
 const fields = { sFocus: 'focus', sShort: 'short', sLong: 'long', sEvery: 'every' };
 $('setBtn').onclick = () => {
   for (const id in fields) $(id).value = cfg[fields[id]];
   $('sAuto').checked = cfg.auto; $('sSound').checked = cfg.sound;
-  $('setup').classList.toggle('open');
+  $('setup').classList.toggle('open'); $('setBtn').classList.toggle('on', $('setup').classList.contains('open'));
 };
 $('sDone').onclick = () => {
   for (const id in fields) { const v = Math.round(+$(id).value); if (v >= +$(id).min && v <= +$(id).max) cfg[fields[id]] = v; }
   cfg.auto = $('sAuto').checked; cfg.sound = $('sSound').checked;
   save('pomoCfg', cfg);
-  $('setup').classList.remove('open');
+  $('setup').classList.remove('open'); $('setBtn').classList.remove('on');
   if (!running() && left === total) setMode(mode); else draw();
 };
 
@@ -218,6 +327,7 @@ window.api.onPomo(s => { if ('onTop' in s) $('top').classList.toggle('on', !!s.o
 // 달력에서 기록을 지우면 오늘 횟수도 맞춘다
 window.addEventListener('storage', e => { if (e.key === 'pomoLog') draw(); });
 
+applyBg();
 setMode('focus');
 </script>
 </body>

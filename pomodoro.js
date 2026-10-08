@@ -13,9 +13,9 @@ function createPomodoro({ getState, saveState, preload, onVisibilityChange }) {
     if (win) { win.show(); win.focus(); return; }
     const s = st().pomo || {};
     const wa = screen.getPrimaryDisplay().workArea;
-    const b = s.bounds || { x: wa.x + wa.width - 300, y: wa.y + 420, width: 280, height: 380 };
+    const b = s.bounds || { x: wa.x + wa.width - 380, y: wa.y + Math.max(0, wa.height - 600), width: 360, height: 580 };
     win = new BrowserWindow({
-      x: b.x, y: b.y, width: 280, height: 380, resizable: false,
+      x: b.x, y: b.y, width: 360, height: 580, resizable: false,
       frame: false, transparent: true, hasShadow: false, skipTaskbar: true,
       alwaysOnTop: !!s.onTop, minimizable: false, maximizable: false, fullscreenable: false,
       title: '뽀모도로', icon: path.join(__dirname, 'icon.png'),
