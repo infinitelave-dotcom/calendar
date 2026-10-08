@@ -82,16 +82,30 @@
   #setup.open { display:flex; }
   #setup h4 { margin:2px 0 0; font-size:13px; opacity:.7; font-weight:600; }
   #setup label { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  #setup input[type=number] { width:64px; background:rgba(255,255,255,.12); border:0; border-radius:6px; color:#fff; padding:4px 6px; font-size:13px; font-family:inherit; text-align:right; }
+  #setup input[type=number] { width:70px; height:30px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.14); border-radius:10px; color:#fff;
+                              padding:0 6px; font-size:14px; font-weight:600; font-family:inherit; text-align:center; outline:none; -moz-appearance:textfield; }
+  #setup input[type=number]:focus { border-color:rgba(255,255,255,.5); background:rgba(255,255,255,.16); }
+  #setup input[type=number]::-webkit-inner-spin-button, #setup input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+  /* 켜기/끄기 스위치 */
+  .sw { appearance:none; -webkit-appearance:none; width:38px; height:22px; border-radius:11px; background:rgba(255,255,255,.2); position:relative; cursor:pointer; flex:none; transition:background .2s; margin:0; }
+  .sw::after { content:''; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+  .sw:checked { background:var(--play); }
+  .sw:checked::after { transform:translateX(16px); }
   #setup input[type=range] { flex:1; }
   .presets { display:flex; flex-wrap:wrap; gap:8px; }
   .presets div { width:34px; height:34px; border-radius:50%; cursor:pointer; border:2px solid transparent; }
   .presets div.on { border-color:#fff; }
   .row2 { display:flex; gap:6px; align-items:center; }
-  .row2 input[type=color] { width:34px; height:28px; border:0; padding:0; background:none; cursor:pointer; }
-  .sbtn { background:rgba(255,255,255,.14); border-radius:8px; padding:6px 10px; font-size:12px; }
-  .sbtn:hover { background:rgba(255,255,255,.24); }
-  #sDone { margin-top:6px; background:var(--play); border-radius:10px; padding:9px; font-weight:700; font-size:14px; }
+  .row2 input[type=color] { width:36px; height:30px; border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:2px; background:rgba(255,255,255,.08); cursor:pointer; }
+  .row2 input[type=color]::-webkit-color-swatch-wrapper { padding:0; }
+  .row2 input[type=color]::-webkit-color-swatch { border:0; border-radius:7px; }
+  /* 둥근 모서리 사각형 버튼 */
+  .sbtn { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; height:36px; background:rgba(255,255,255,.1);
+          border:1px solid rgba(255,255,255,.16); border-radius:12px; padding:0 10px; font-size:13px; font-weight:600; transition:background .15s, border-color .15s; }
+  .sbtn:hover { background:rgba(255,255,255,.18); border-color:rgba(255,255,255,.3); }
+  .sbtn svg { width:16px; height:16px; flex:none; }
+  #sDone { margin-top:8px; height:42px; background:var(--play); border-radius:12px; font-weight:700; font-size:14px; box-shadow:0 4px 12px rgba(0,0,0,.2); transition:filter .15s; }
+  #sDone:hover { filter:brightness(1.08); }
   .note { font-size:11px; opacity:.6; }
 </style>
 </head>
@@ -148,13 +162,13 @@
     <label>짧은 휴식 (분) <input type="number" id="sShort" min="1" max="60"></label>
     <label>긴 휴식 (분) <input type="number" id="sLong" min="1" max="120"></label>
     <label>긴 휴식은 집중 몇 번마다 <input type="number" id="sEvery" min="2" max="10"></label>
-    <label>끝나면 다음 것 자동 시작 <input type="checkbox" id="sAuto"></label>
-    <label>끝날 때 소리 <input type="checkbox" id="sSound"></label>
-    <h4>배경 (달력과 따로)</h4>
+    <label>끝나면 다음 것 자동 시작 <input type="checkbox" class="sw" id="sAuto"></label>
+    <label>끝날 때 소리 <input type="checkbox" class="sw" id="sSound"></label>
+    <h4>배경</h4>
     <div class="presets" id="presets"></div>
     <div class="row2">직접 고르기 <input type="color" id="c1"> <input type="color" id="c2"></div>
     <h4>가운데 사진 (앨범 표지처럼)</h4>
-    <div class="row2"><button class="sbtn" id="pickImg">🖼 사진 넣기</button><button class="sbtn" id="clearImg">레코드판으로 되돌리기</button><input type="file" id="file" accept="image/*" hidden></div>
+    <div class="row2"><button class="sbtn" id="pickImg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>사진 넣기</button><button class="sbtn" id="clearImg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>레코드판으로</button><input type="file" id="file" accept="image/*" hidden></div>
     <label>배경 흐리게 <input type="range" id="blur" min="0" max="30"></label>
     <div class="note">사진을 넣으면 가운데 레코드판이 그 사진(둥근 사각형)으로 바뀌고, 배경에도 흐리게 깔려요. 5MB 이하 사진만 쓸 수 있어요.</div>
     <button id="sDone">확인</button>
