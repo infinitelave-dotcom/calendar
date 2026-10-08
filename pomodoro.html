@@ -77,8 +77,29 @@
   .dots i.done { background:#fff; }
 
   /* ≡ 설정 */
-  #setup { display:none; position:absolute; inset:48px 12px 12px; background:rgba(30,26,40,.88); backdrop-filter:blur(8px); border-radius:14px;
-           padding:14px; flex-direction:column; gap:9px; font-size:13px; overflow-y:auto; text-shadow:none; }
+  #setup { display:none; position:absolute; inset:48px 12px 12px; background:rgba(30,26,40,.9); backdrop-filter:blur(8px); border-radius:16px;
+           padding:14px 8px 14px 14px; flex-direction:column; font-size:13px; text-shadow:none; }
+  /* 내용은 위에서 스크롤, 확인 버튼은 아래에 항상 보이게 */
+  .sbody { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:9px; padding-right:8px; }
+  /* 둥근 모서리 사각형 스크롤 막대 */
+  .sbody > *, .reset-box > * { flex:none; }
+  #setup .sbody > .sbtn, #setup .reset-box > .sbtn { flex:none; height:38px; }
+  .sbody::-webkit-scrollbar { width:8px; }
+  .sbody::-webkit-scrollbar-track { background:rgba(255,255,255,.06); border-radius:6px; }
+  .sbody::-webkit-scrollbar-thumb { background:rgba(255,255,255,.32); border-radius:6px; }
+  .sbody::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,.5); }
+  /* 기록 초기화 */
+  .reset-box { display:flex; flex-direction:column; gap:8px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:10px; }
+  .seg { display:grid; grid-template-columns:repeat(3, 1fr); gap:5px; }
+  .seg button { height:30px; border-radius:9px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); font-size:12px; }
+  .seg button.on { background:rgba(255,255,255,.85); color:#3a3046; font-weight:700; }
+  .range { display:none; align-items:center; gap:6px; }
+  .range.on { display:flex; }
+  .range input { flex:1; min-width:0; height:30px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.14); border-radius:9px; color:#fff;
+                 font-family:inherit; font-size:12px; padding:0 6px; color-scheme:dark; }
+  .rcount { font-size:12px; opacity:.75; }
+  .danger { background:rgba(232,87,79,.22) !important; border-color:rgba(232,87,79,.55) !important; color:#FFD9D6; }
+  .danger:hover { background:rgba(232,87,79,.38) !important; }
   #setup.open { display:flex; }
   #setup h4 { margin:2px 0 0; font-size:13px; opacity:.7; font-weight:600; }
   #setup label { display:flex; align-items:center; justify-content:space-between; gap:8px; }
@@ -104,7 +125,8 @@
           border:1px solid rgba(255,255,255,.16); border-radius:12px; padding:0 10px; font-size:13px; font-weight:600; transition:background .15s, border-color .15s; }
   .sbtn:hover { background:rgba(255,255,255,.18); border-color:rgba(255,255,255,.3); }
   .sbtn svg { width:16px; height:16px; flex:none; }
-  #sDone { margin-top:8px; height:42px; background:var(--play); border-radius:12px; font-weight:700; font-size:14px; box-shadow:0 4px 12px rgba(0,0,0,.2); transition:filter .15s; }
+  #sDone { flex:none; margin:12px 6px 0 0; height:48px; background:var(--play); border-radius:14px; font-weight:700; font-size:16px; letter-spacing:1px;
+           box-shadow:0 4px 14px rgba(0,0,0,.25); transition:filter .15s; }
   #sDone:hover { filter:brightness(1.08); }
   .note { font-size:11px; opacity:.6; }
 </style>
@@ -156,7 +178,7 @@
     <div class="foot"><span id="today"></span><div class="dots" id="dots"></div></div>
   </div>
 
-  <div id="setup">
+  <div id="setup"><div class="sbody">
     <h4>시간</h4>
     <label>집중 (분) <input type="number" id="sFocus" min="1" max="180"></label>
     <label>짧은 휴식 (분) <input type="number" id="sShort" min="1" max="60"></label>
@@ -171,6 +193,21 @@
     <div class="row2"><button class="sbtn" id="pickImg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>사진 넣기</button><button class="sbtn" id="clearImg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>레코드판으로</button><input type="file" id="file" accept="image/*" hidden></div>
     <label>배경 흐리게 <input type="range" id="blur" min="0" max="30"></label>
     <div class="note">사진을 넣으면 가운데 레코드판이 그 사진(둥근 사각형)으로 바뀌고, 배경에도 흐리게 깔려요. 5MB 이하 사진만 쓸 수 있어요.</div>
+    <h4>초기화</h4>
+    <div class="reset-box">
+      <div class="seg" id="rPeriod">
+        <button type="button" data-p="today" class="on">오늘</button>
+        <button type="button" data-p="week">이번 주</button>
+        <button type="button" data-p="month">이번 달</button>
+        <button type="button" data-p="custom">기간 선택</button>
+        <button type="button" data-p="all">전체</button>
+      </div>
+      <div class="range" id="rRange"><input type="date" id="rFrom"> ~ <input type="date" id="rTo"></div>
+      <div class="rcount" id="rCount"></div>
+      <button type="button" class="sbtn danger" id="rLog">🍅 이 기간 기록 지우기</button>
+    </div>
+    <button type="button" class="sbtn" id="rCfg">시간·배경 설정을 처음 상태로</button>
+    </div>
     <button id="sDone">확인</button>
   </div>
 </div>
@@ -334,8 +371,53 @@ const fields = { sFocus: 'focus', sShort: 'short', sLong: 'long', sEvery: 'every
 $('setBtn').onclick = () => {
   for (const id in fields) $(id).value = cfg[fields[id]];
   $('sAuto').checked = cfg.auto; $('sSound').checked = cfg.sound;
+  showReset();
   $('setup').classList.toggle('open'); $('setBtn').classList.toggle('on', $('setup').classList.contains('open'));
 };
+// ── 초기화 (기간을 골라 뽀모도로 기록 지우기) ──
+let rPeriod = 'today';
+function periodRange() {
+  const now = new Date(), t = key(now);
+  if (rPeriod === 'today') return [t, t];
+  if (rPeriod === 'week') {   // 월요일 ~ 일요일
+    const d = new Date(now); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    const e = new Date(d); e.setDate(d.getDate() + 6); return [key(d), key(e)];
+  }
+  if (rPeriod === 'month') return [key(new Date(now.getFullYear(), now.getMonth(), 1)), key(new Date(now.getFullYear(), now.getMonth() + 1, 0))];
+  if (rPeriod === 'custom') { let a = $('rFrom').value, b = $('rTo').value || a; if (!a) return null; if (b < a) [a, b] = [b, a]; return [a, b]; }
+  return ['0000-00-00', '9999-12-31'];
+}
+const inPeriod = r => { const p = periodRange(); return p && r.date >= p[0] && r.date <= p[1]; };
+function showReset() {
+  document.querySelectorAll('#rPeriod button').forEach(b => b.classList.toggle('on', b.dataset.p === rPeriod));
+  $('rRange').classList.toggle('on', rPeriod === 'custom');
+  const list = live(load('pomoLog', [])).filter(inPeriod);
+  const p = periodRange();
+  $('rCount').textContent = !p ? '시작 날짜를 골라 주세요.'
+    : (rPeriod === 'all' ? '전체 기록' : p[0] === p[1] ? p[0] : `${p[0]} ~ ${p[1]}`) + ` · 🍅 ${list.length}회 (${list.reduce((a, r) => a + r.minutes, 0)}분)`;
+  $('rLog').disabled = !list.length; $('rLog').style.opacity = list.length ? 1 : .45;
+}
+document.querySelectorAll('#rPeriod button').forEach(b => b.onclick = () => {
+  rPeriod = b.dataset.p;
+  if (rPeriod === 'custom' && !$('rFrom').value) { $('rFrom').value = $('rTo').value = key(new Date()); }
+  showReset();
+});
+$('rFrom').onchange = $('rTo').onchange = showReset;
+$('rLog').onclick = () => {
+  const log = load('pomoLog', []), targets = live(log).filter(inPeriod);
+  if (!targets.length) return;
+  if (!confirm(`${$('rCount').textContent}\n\n이 기록을 지울까요? 되돌릴 수 없어요.`)) return;
+  const ids = new Set(targets.map(r => r.id));
+  log.forEach(r => { if (ids.has(r.id)) { r.deleted = true; touch(r); } });
+  save('pomoLog', log);
+  showReset(); draw();
+};
+$('rCfg').onclick = () => {
+  if (!confirm('집중·휴식 시간, 자동 시작, 소리, 배경과 가운데 사진을 처음 상태로 되돌릴까요? (기록은 그대로)')) return;
+  localStorage.removeItem('pomoCfg'); localStorage.removeItem('pomoBg'); localStorage.removeItem('pomoCycle');
+  location.reload();
+};
+
 $('sDone').onclick = () => {
   for (const id in fields) { const v = Math.round(+$(id).value); if (v >= +$(id).min && v <= +$(id).max) cfg[fields[id]] = v; }
   cfg.auto = $('sAuto').checked; cfg.sound = $('sSound').checked;
