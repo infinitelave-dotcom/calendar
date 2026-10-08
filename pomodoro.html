@@ -98,6 +98,8 @@
   .range input { flex:1; min-width:0; height:30px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.14); border-radius:9px; color:#fff;
                  font-family:inherit; font-size:12px; padding:0 6px; color-scheme:dark; }
   .rcount { font-size:12px; opacity:.75; }
+  .snd button { display:flex; align-items:center; justify-content:center; gap:4px; }
+  .snd button::before { content:'♪'; opacity:.7; }
   .danger { background:rgba(232,87,79,.22) !important; border-color:rgba(232,87,79,.55) !important; color:#FFD9D6; }
   .danger:hover { background:rgba(232,87,79,.38) !important; }
   #setup.open { display:flex; }
@@ -186,6 +188,8 @@
     <label>긴 휴식은 집중 몇 번마다 <input type="number" id="sEvery" min="2" max="10"></label>
     <label>끝나면 다음 것 자동 시작 <input type="checkbox" class="sw" id="sAuto"></label>
     <label>끝날 때 소리 <input type="checkbox" class="sw" id="sSound"></label>
+    <div class="seg snd" id="sndList"></div>
+    <label>소리 크기 <input type="range" id="sVol" min="0" max="100"></label>
     <h4>배경</h4>
     <div class="presets" id="presets"></div>
     <div class="row2">직접 고르기 <input type="color" id="c1"> <input type="color" id="c2"></div>
@@ -264,7 +268,7 @@ $('clearImg').onclick = () => { bg.image = null; saveBg(); };
 $('blur').oninput = e => { bg.blur = +e.target.value; saveBg(); };
 
 // ── 타이머 ──
-let cfg = Object.assign({ focus: 25, short: 5, long: 15, every: 4, auto: false, sound: true }, load('pomoCfg', {}));
+let cfg = Object.assign({ focus: 25, short: 5, long: 15, every: 4, auto: false, sound: true, soundName: 'dingdong', volume: 80 }, load('pomoCfg', {}));
 let mode = 'focus';
 let total = cfg.focus * 60;          // 이번 시간 전체 (초)
 let left = total;                     // 남은 시간 (초)
@@ -301,6 +305,7 @@ function draw() {
   $('dots').innerHTML = Array.from({ length: cfg.every }, (_, i) => `<i class="${i < cycle ? 'done' : ''}"></i>`).join('');
 }
 function start() {
+  ensureAudio();
   if (running()) return;
   if (mode === 'focus' && !startedAt) startedAt = new Date().toISOString();
   endAt = Date.now() + left * 1000;
@@ -334,27 +339,60 @@ function finish(done) {
   if (done) {
     const msg = mode === 'focus' ? `집중 ${cfg.focus}분 끝! ${LABEL[next]} 시간이에요.` : '휴식 끝! 다시 집중해 볼까요?';
     window.api.notify('🍅 뽀모도로', msg);
-    if (cfg.sound) beep();
+    if (cfg.sound) playSound();
   }
   setMode(next);
   if (done && cfg.auto) start();
 }
 
-// 짧은 알림 소리 (딩-동)
-function beep() {
+// ── 알림 소리 5가지 ──
+// 소리 파일 없이 그 자리에서 만들어 낸다. 오디오 장치는 처음 ▶ 를 누를 때 미리 깨워 두고
+// (사용자가 누르지 않은 순간에 처음 만들면 윈도우/크롬이 소리를 막을 수 있어서), 울리기 직전에 한 번 더 깨운다.
+const SOUNDS = { dingdong: '딩동', bell: '종소리', chime: '차임', xylo: '실로폰', alarm: '디지털 알람' };
+let audio = null;
+function ensureAudio() {
+  if (!audio || audio.state === 'closed') audio = new AudioContext();
+  if (audio.state === 'suspended') audio.resume();
+  return audio;
+}
+// 소리 하나 = 음표 여러 개. 음표: [시작(초), 주파수, 길이, 파형, 세기, 배음들]
+function tone(ac, out, t0, f, len, type = 'sine', amp = 1, partials = [1]) {
+  partials.forEach((m, i) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = f * m;
+    const a = amp / (i + 1) ** 1.2;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(a, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+    o.connect(g).connect(out); o.start(t0); o.stop(t0 + len + 0.05);
+  });
+}
+function renderSound(ac, out, name, start) {
+  const t = start;
+  if (name === 'dingdong') {                       // 딩- 동- (두 번)
+    for (const r of [0, 1.6]) { tone(ac, out, t + r, 988, 1.2, 'sine', .9, [1, 2, 3]); tone(ac, out, t + r + .45, 784, 1.4, 'sine', .9, [1, 2, 3]); }
+  } else if (name === 'bell') {                    // 데엥- 길게 울리는 종 (세 번)
+    for (const r of [0, 1.3, 2.6]) tone(ac, out, t + r, 523, 2.4, 'sine', .9, [1, 2.0, 2.76, 5.4, 8.9]);
+  } else if (name === 'chime') {                   // 도-미-솔-도 올라가는 차임 (두 번)
+    [523, 659, 784, 1047].forEach((f, i) => { tone(ac, out, t + i * .22, f, 1.6, 'triangle', .8, [1, 3]); tone(ac, out, t + 1.6 + i * .22, f, 1.6, 'triangle', .8, [1, 3]); });
+  } else if (name === 'xylo') {                    // 통통 튀는 실로폰 멜로디
+    [784, 988, 1175, 988, 1319, 1175, 1568].forEach((f, i) => tone(ac, out, t + i * .16, f, .45, 'sine', .9, [1, 4, 9.2]));
+    [784, 988, 1175, 1568].forEach((f, i) => tone(ac, out, t + 1.5 + i * .16, f, .5, 'sine', .9, [1, 4, 9.2]));
+  } else {                                         // 삐삐삐삐- 디지털 시계 알람 (세 번)
+    for (const r of [0, 1, 2]) for (let k = 0; k < 4; k++) tone(ac, out, t + r + k * .13, 2093, .1, 'square', 1.2);
+  }
+}
+const SOUND_LEN = { dingdong: 3.2, bell: 5.2, chime: 3.4, xylo: 2.3, alarm: 2.6 };
+function playSound(name = cfg.soundName, vol = cfg.volume) {
   try {
-    const ac = new AudioContext();
-    [[880, 0], [660, .22]].forEach(([f, t]) => {
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.frequency.value = f; o.type = 'sine';
-      g.gain.setValueAtTime(0.0001, ac.currentTime + t);
-      g.gain.exponentialRampToValueAtTime(0.3, ac.currentTime + t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + t + 0.5);
-      o.connect(g).connect(ac.destination); o.start(ac.currentTime + t); o.stop(ac.currentTime + t + 0.55);
-    });
-    setTimeout(() => ac.close(), 1200);
+    const ac = ensureAudio();
+    const out = ac.createGain(); out.gain.value = Math.max(0, Math.min(1, vol / 100)) * 0.7; out.connect(ac.destination);
+    const go = () => renderSound(ac, out, name, ac.currentTime + 0.05);
+    ac.state === 'running' ? go() : ac.resume().then(go).catch(go);
   } catch {}
 }
+// 처음 누르는 순간 오디오 장치를 깨워 둔다
+document.addEventListener('pointerdown', () => ensureAudio(), { once: true });
 
 $('start').onclick = () => running() ? pause() : start();
 $('reset').onclick = () => setMode(mode);
@@ -371,9 +409,22 @@ const fields = { sFocus: 'focus', sShort: 'short', sLong: 'long', sEvery: 'every
 $('setBtn').onclick = () => {
   for (const id in fields) $(id).value = cfg[fields[id]];
   $('sAuto').checked = cfg.auto; $('sSound').checked = cfg.sound;
+  $('sVol').value = cfg.volume; drawSounds();
   showReset();
   $('setup').classList.toggle('open'); $('setBtn').classList.toggle('on', $('setup').classList.contains('open'));
 };
+// 소리 고르기: 누르면 바로 들려준다
+function drawSounds() {
+  $('sndList').innerHTML = '';
+  Object.entries(SOUNDS).forEach(([k, name]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = name; b.title = '눌러서 미리 듣기';
+    b.classList.toggle('on', k === cfg.soundName);
+    b.onclick = () => { cfg.soundName = k; save('pomoCfg', cfg); drawSounds(); playSound(k, +$('sVol').value); };
+    $('sndList').append(b);
+  });
+}
+$('sVol').onchange = e => { cfg.volume = +e.target.value; save('pomoCfg', cfg); playSound(cfg.soundName, cfg.volume); };
+
 // ── 초기화 (기간을 골라 뽀모도로 기록 지우기) ──
 let rPeriod = 'today';
 function periodRange() {
@@ -420,7 +471,7 @@ $('rCfg').onclick = () => {
 
 $('sDone').onclick = () => {
   for (const id in fields) { const v = Math.round(+$(id).value); if (v >= +$(id).min && v <= +$(id).max) cfg[fields[id]] = v; }
-  cfg.auto = $('sAuto').checked; cfg.sound = $('sSound').checked;
+  cfg.auto = $('sAuto').checked; cfg.sound = $('sSound').checked; cfg.volume = +$('sVol').value;
   save('pomoCfg', cfg);
   $('setup').classList.remove('open'); $('setBtn').classList.remove('on');
   if (!running() && left === total) setMode(mode); else draw();

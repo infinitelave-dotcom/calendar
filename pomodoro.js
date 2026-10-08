@@ -19,7 +19,8 @@ function createPomodoro({ getState, saveState, preload, onVisibilityChange }) {
       frame: false, transparent: true, hasShadow: false, skipTaskbar: true,
       alwaysOnTop: !!s.onTop, minimizable: false, maximizable: false, fullscreenable: false,
       title: '뽀모도로', icon: path.join(__dirname, 'icon.png'),
-      webPreferences: { preload, backgroundThrottling: false },   // 창이 가려져도 타이머가 느려지지 않게
+      // 창이 가려져도 타이머가 느려지지 않게, 클릭 없이 끝나는 순간에도 소리가 나게
+      webPreferences: { preload, backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' },
     });
     win.setMenu(null);
     win.loadFile(path.join(__dirname, 'pomodoro.html'));
