@@ -35,7 +35,9 @@
   .icon-btn { display:flex; align-items:center; gap:6px; white-space:nowrap; }
   .icon-btn svg { width:18px; height:18px; }
   /* 창이 좁으면 위쪽 버튼은 그림만 (마우스를 올리면 이름이 보임) */
-  @media (max-width: 1180px) { .icon-btn .lbl { display:none; } .icon-btn { padding:6px 9px; } }
+  @media (max-width: 1480px) { .icon-btn .lbl { display:none; } .icon-btn { padding:6px 9px; } }
+  @media (max-width: 1180px) { .viewtog .vt { display:none; } }
+  @media (max-width: 1060px) { header h1 { font-size:24px; margin:0 4px; } header { gap:6px; } }
   header { min-width:0; }
   .icon-btn.on { background:var(--accent); color:#1B2A41; text-shadow:none; }
   .dows, .days { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:4px; }
@@ -78,6 +80,17 @@
   .opq svg { width:16px; height:16px; }
   .opq input { width:110px; }
   .opq span { width:36px; text-align:right; font-variant-numeric:tabular-nums; }
+  /* 뽀모도로 달력 */
+  .viewtog { white-space:nowrap; flex:none; font-size:14px; }
+  .viewtog.on { background:#E8574F; color:#fff; text-shadow:none; font-weight:700; }
+  body.pomo .search, body.pomo .cfilter, body.pomo #form { display:none !important; }
+  .pcell { margin:2px 6px 0; display:flex; flex-direction:column; gap:2px; text-shadow:none; }
+  .pcell .cnt { align-self:flex-start; background:#E8574F; color:#fff; border-radius:10px; padding:1px 8px; font-size:13px; font-weight:700; }
+  .pcell .min { font-size:12px; color:var(--muted); text-shadow:var(--ts); padding-left:2px; }
+  .pomo-card { display:flex; flex-direction:column; gap:8px; }
+  .pomo-card .big { font-size:15px; }
+  .pomo-open { background:#E8574F; color:#fff; font-weight:700; padding:9px; text-shadow:none; }
+  .pomo-open:hover { background:#E8574F; filter:brightness(1.1); }
   /* 검색 · 색 보기 */
   .tools { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   .search { display:flex; align-items:center; gap:6px; background:var(--soft); border-radius:8px; padding:0 8px; flex:0 1 260px; min-width:150px; }
@@ -144,9 +157,13 @@
       <h1 id="title"></h1>
       <button id="next">▶</button>
       <button id="todayBtn">오늘</button>
+      <button id="pomoCalBtn" class="viewtog" title="뽀모도로 기록만 보는 달력으로 바꾸기">🍅<span class="vt"> 뽀모도로 달력</span></button>
       <div class="sp"></div>
       <button id="memoBtn" class="icon-btn" title="메모 창 보이기/숨기기">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11l-5 5H4z"/><path d="M15 20v-5h5"/></svg><span class="lbl">메모</span>
+      </button>
+      <button id="pomoBtn" class="icon-btn" title="뽀모도로 타이머 열기/닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V10M12 6V3.5M9.5 3.5h5"/></svg><span class="lbl">뽀모도로</span>
       </button>
       <button id="ytBtn" class="icon-btn" title="작은 유튜브 창 열기/닫기">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/></svg><span class="lbl">유튜브</span>
@@ -215,6 +232,11 @@
     <div class="sub" id="selSub"></div>
     <div id="list"></div>
 
+    <div class="card pomo-card" id="pomoCard" hidden>
+      <div class="big" id="pomoMonth"></div>
+      <button type="button" class="pomo-open" id="pomoOpen">🍅 뽀모도로 타이머 열기</button>
+      <div class="hint">타이머에서 집중 시간을 끝까지 마치면 자동으로 이 달력에 기록돼요.</div>
+    </div>
     <form class="card" id="form">
       <label>새 일정</label>
       <input class="field" type="text" id="text" placeholder="예) 연차" maxlength="100">
@@ -323,6 +345,20 @@ function render() {
                       k===todayKey && 'today', a !== b && k >= a && k <= b && 'inrange', a === b && k === a && 'sel'].filter(Boolean).join(' ');
     cell.dataset.k = k;
     const num = document.createElement('div'); num.className = 'num'; num.textContent = d.getDate(); cell.append(num);
+    if (calMode === 'pomo') {
+      // 뽀모도로 달력: 그날 끝낸 횟수와 집중한 시간만
+      const p = pomoOn(k);
+      if (p.length) {
+        const mins = p.reduce((s, r) => s + r.minutes, 0);
+        const w = document.createElement('div'); w.className = 'pcell';
+        w.innerHTML = `<span class="cnt">🍅 ${p.length}</span><span class="min">${hm(mins)}</span>`;
+        cell.append(w);
+        // 많이 한 날일수록 진하게
+        cell.style.background = `color-mix(in srgb, #E8574F ${Math.min(45, 8 + mins / 6)}%, transparent)`;
+      }
+      box.append(cell);
+      continue;
+    }
     const list = eventsOn(k);
     list.slice(0, 3).forEach(ev => {
       const c = document.createElement('div');
@@ -362,9 +398,52 @@ function highlight(el, text) {
   el.append(text.slice(0, s0), m, text.slice(s1));
 }
 
+// 뽀모도로 기록: [{id, date, start, end, minutes, task, u, deleted}]
+let calMode = load('calMode', 'events');
+const pomoAll = () => live(load('pomoLog', []));
+const pomoOn = k => pomoAll().filter(r => r.date === k);
+const hm = m => m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ' ' + (m % 60) + '분' : ''}` : `${m}분`;
+const clock = iso => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+
+function renderPomoSide(a, b) {
+  $('selLabel').textContent = a === b ? `${fmt(a)} ${DOW[parse(a).getDay()]}요일` : `${fmt(a)} ~ ${fmt(b)} (${days(a, b)}일)`;
+  const list = pomoAll().filter(r => r.date >= a && r.date <= b).sort((x, y) => x.start.localeCompare(y.start));
+  const mins = list.reduce((s, r) => s + r.minutes, 0);
+  $('selSub').textContent = list.length ? `🍅 ${list.length}회 · 총 ${hm(mins)}` : '';
+  $('list').innerHTML = list.length ? '' : '<div class="empty">이날은 뽀모도로 기록이 없어요.</div>';
+  list.forEach(r => {
+    const row = document.createElement('div'); row.className = 'ev'; row.style.borderLeftColor = '#E8574F';
+    const info = document.createElement('div'); info.className = 'info';
+    const m = document.createElement('div'); m.className = 'meta';
+    m.textContent = `🍅 ${a !== b ? fmt(r.date) + ' · ' : ''}${clock(r.start)} ~ ${clock(r.end)} · ${r.minutes}분`;
+    const t = document.createElement('div'); t.className = 'txt'; t.textContent = r.task || '(집중한 일 이름 없음)';
+    if (!r.task) t.style.opacity = .6;
+    info.append(m, t); row.append(info);
+    const del = document.createElement('button'); del.textContent = '삭제';
+    del.onclick = () => {
+      if (!confirm('이 뽀모도로 기록을 지울까요?')) return;
+      const log = load('pomoLog', []); const x = log.find(y => y.id === r.id);
+      if (x) { x.deleted = true; touch(x); save('pomoLog', log); }
+      render();
+    };
+    row.append(del); $('list').append(row);
+  });
+  // 이번 달 합계
+  const ym = `${view.getFullYear()}-${String(view.getMonth() + 1).padStart(2, '0')}`;
+  const month = pomoAll().filter(r => r.date.startsWith(ym));
+  const dayCount = new Set(month.map(r => r.date)).size;
+  $('pomoMonth').textContent = `${view.getMonth() + 1}월: 🍅 ${month.length}회 · ${hm(month.reduce((s, r) => s + r.minutes, 0))} · ${dayCount}일`;
+}
+
 function renderSide() {
   const [a, b] = range();
   $('startDate').value = a; $('endDate').value = b;
+  document.body.classList.toggle('pomo', calMode === 'pomo');
+  $('pomoCard').hidden = calMode !== 'pomo';
+  $('pomoCalBtn').classList.toggle('on', calMode === 'pomo');
+  $('pomoCalBtn').innerHTML = calMode === 'pomo' ? '📅<span class="vt"> 일정 달력</span>' : '🍅<span class="vt"> 뽀모도로 달력</span>';
+  $('pomoCalBtn').title = calMode === 'pomo' ? '일정 달력으로 돌아가기' : '뽀모도로 기록만 보는 달력으로 바꾸기';
+  if (calMode === 'pomo') { renderPomoSide(a, b); return; }
   const searching = !!query;
   let list;
   if (searching) {
@@ -561,15 +640,21 @@ $('resetAll').onclick = () => {
 };
 
 // 잠금 / 바탕화면 고정 / 메모 창
-let locked = false, memoVisible = true, ytVisible = false;
+let locked = false, memoVisible = true, ytVisible = false, pomoVisible = false;
 function showButtons() {
   $('lockBtn').innerHTML = locked ? LOCK_ON : LOCK_OFF;
   $('lockBtn').classList.toggle('on', locked);
   $('memoBtn').classList.toggle('on', memoVisible);
   $('ytBtn').classList.toggle('on', ytVisible);
+  $('pomoBtn').classList.toggle('on', pomoVisible);
   document.body.classList.toggle('locked', locked);
 }
 $('lockBtn').onclick = () => { locked = !locked; showButtons(); window.api.setLocked(locked); };
+$('pomoBtn').onclick = () => { pomoVisible = !pomoVisible; showButtons(); window.api.setPomodoro(pomoVisible); };
+$('pomoOpen').onclick = () => { pomoVisible = true; showButtons(); window.api.setPomodoro(true); };
+$('pomoCalBtn').onclick = () => { calMode = calMode === 'pomo' ? 'events' : 'pomo'; save('calMode', calMode); render(); };
+// 타이머 창에서 기록이 늘면 바로 다시 그리기
+window.addEventListener('storage', e => { if (e.key === 'pomoLog' && calMode === 'pomo') render(); });
 $('ytBtn').onclick = () => { ytVisible = !ytVisible; showButtons(); window.api.setYoutube(ytVisible); };
 $('memoBtn').onclick = () => { memoVisible = !memoVisible; showButtons(); window.api.setMemoVisible(memoVisible); };
 $('pinBtn').onclick = () => { $('settings').classList.remove('open'); window.api.desktopMode(); };
@@ -579,7 +664,7 @@ window.api.onState(s => {
     if (document.activeElement !== $('petSize')) $('petSize').value = s.pet.size;
     $('petDefault').disabled = !s.pet.custom; $('petDefault').style.opacity = s.pet.custom ? 1 : .5;
   }
-  locked = s.locked; memoVisible = s.memoVisible; ytVisible = !!s.ytVisible; showButtons();
+  locked = s.locked; memoVisible = s.memoVisible; ytVisible = !!s.ytVisible; pomoVisible = !!s.pomoVisible; showButtons();
   if (s.version) $('versionRow').textContent = `현재 버전 ${s.version}`;
 });
 showButtons();

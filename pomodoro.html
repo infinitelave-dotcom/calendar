@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>뽀모도로</title>
+<style>
+  :root { --base: 27,42,65; --fg:#F6F4EE; --ring:#E8574F;
+          --muted: color-mix(in srgb, var(--fg) 65%, transparent); --soft: color-mix(in srgb, var(--fg) 12%, transparent); }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:transparent; font-family:'Malgun Gothic','Segoe UI',sans-serif; color:var(--fg); user-select:none; overflow:hidden; }
+  #card { position:absolute; inset:4px; border-radius:16px; background:rgba(var(--base), .96); box-shadow:0 4px 16px rgba(0,0,0,.4);
+          display:flex; flex-direction:column; align-items:center; padding:0 14px 12px; }
+  /* 위쪽 띠: 끌어서 창 이동 */
+  .bar { width:calc(100% + 28px); height:34px; display:flex; align-items:center; gap:4px; padding:0 8px 0 12px; -webkit-app-region:drag; flex:none; }
+  .bar .t { flex:1; font-size:13px; font-weight:700; opacity:.85; }
+  button { -webkit-app-region:no-drag; font-family:inherit; cursor:pointer; border:0; color:var(--fg); }
+  .ib { width:26px; height:26px; border-radius:6px; background:transparent; display:flex; align-items:center; justify-content:center; padding:0; opacity:.75; }
+  .ib:hover { background:var(--soft); opacity:1; }
+  .ib.on { background:var(--soft); opacity:1; }
+  .ib svg { width:15px; height:15px; }
+  #close:hover { background:#E81123; }
+  /* 집중 / 짧은 휴식 / 긴 휴식 */
+  .modes { display:flex; gap:4px; background:var(--soft); border-radius:10px; padding:3px; margin-top:2px; flex:none; }
+  .modes button { background:transparent; font-size:12px; padding:5px 9px; border-radius:7px; opacity:.75; }
+  .modes button.on { background:var(--ring); color:#fff; opacity:1; font-weight:700; }
+  /* 동그란 진행 표시 */
+  .dial { position:relative; width:170px; height:170px; margin:12px 0 8px; flex:none; }
+  .dial svg { width:100%; height:100%; transform:rotate(-90deg); }
+  .dial .track { stroke:var(--soft); }
+  .dial .prog { stroke:var(--ring); stroke-linecap:round; transition:stroke-dashoffset .3s linear; }
+  .time { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .time b { font-size:40px; font-weight:700; letter-spacing:1px; font-variant-numeric:tabular-nums; }
+  .time span { font-size:12px; color:var(--muted); margin-top:2px; }
+  #task { width:100%; background:var(--soft); border:0; border-radius:8px; color:var(--fg); font-size:13px; padding:7px 10px; outline:none; font-family:inherit; text-align:center; flex:none; }
+  #task::placeholder { color:var(--muted); }
+  .ctrl { display:flex; gap:10px; align-items:center; margin-top:10px; flex:none; }
+  .round { width:38px; height:38px; border-radius:50%; background:var(--soft); display:flex; align-items:center; justify-content:center; padding:0; }
+  .round:hover { filter:brightness(1.3); }
+  .round svg { width:16px; height:16px; }
+  #start { width:56px; height:56px; background:var(--ring); color:#fff; }
+  #start svg { width:22px; height:22px; }
+  .foot { margin-top:auto; padding-top:8px; width:100%; display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--muted); flex:none; }
+  .dots { display:flex; gap:4px; }
+  .dots i { width:8px; height:8px; border-radius:50%; background:var(--soft); }
+  .dots i.done { background:var(--ring); }
+  /* 시간 설정 */
+  #setup { display:none; position:absolute; inset:38px 10px 10px; background:rgba(var(--base), .99); border-radius:12px; padding:12px; flex-direction:column; gap:9px; font-size:13px; border:1px solid var(--soft); }
+  #setup.open { display:flex; }
+  #setup label { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  #setup input[type=number] { width:64px; background:var(--soft); border:0; border-radius:6px; color:var(--fg); padding:4px 6px; font-size:13px; font-family:inherit; text-align:right; }
+  #setup .done { margin-top:auto; background:var(--ring); color:#fff; border-radius:8px; padding:7px; font-weight:700; }
+</style>
+</head>
+<body>
+<div id="card">
+  <div class="bar">
+    <span class="t">🍅 뽀모도로</span>
+    <button class="ib" id="setBtn" title="시간 설정"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
+    <button class="ib" id="top" title="항상 위에 두기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.8V5h6v5.8l2.5 3.2h-11z"/></svg></button>
+    <button class="ib" id="close" title="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="modes" id="modes">
+    <button data-m="focus">집중</button>
+    <button data-m="short">짧은 휴식</button>
+    <button data-m="long">긴 휴식</button>
+  </div>
+  <div class="dial">
+    <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45" fill="none" stroke-width="6"/>
+      <circle class="prog" id="prog" cx="50" cy="50" r="45" fill="none" stroke-width="6" stroke-dasharray="282.74" stroke-dashoffset="0"/></svg>
+    <div class="time"><b id="clock">25:00</b><span id="label">집중</span></div>
+  </div>
+  <input id="task" placeholder="무엇에 집중하나요? (선택)" maxlength="60">
+  <div class="ctrl">
+    <button class="round" id="reset" title="처음부터"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v4h4"/></svg></button>
+    <button class="round" id="start" title="시작"></button>
+    <button class="round" id="skip" title="다음으로 넘기기"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 5v14l10-7zM16 5h3v14h-3z"/></svg></button>
+  </div>
+  <div class="foot"><span id="today"></span><div class="dots" id="dots"></div></div>
+  <div id="setup">
+    <label>집중 (분) <input type="number" id="sFocus" min="1" max="180"></label>
+    <label>짧은 휴식 (분) <input type="number" id="sShort" min="1" max="60"></label>
+    <label>긴 휴식 (분) <input type="number" id="sLong" min="1" max="120"></label>
+    <label>긴 휴식은 집중 몇 번마다 <input type="number" id="sEvery" min="2" max="10"></label>
+    <label>끝나면 다음 것 자동 시작 <input type="checkbox" id="sAuto"></label>
+    <label>끝날 때 소리 <input type="checkbox" id="sSound"></label>
+    <button class="done" id="sDone">확인</button>
+  </div>
+</div>
+<script src="common.js"></script>
+<script>
+const LABEL = { focus: '집중', short: '짧은 휴식', long: '긴 휴식' };
+const COLOR = { focus: '#E8574F', short: '#3FAE7A', long: '#3D8BD9' };
+const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>';
+const PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>';
+const key = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+// 달력과 같은 배경색
+const cal = loadCfg(); document.documentElement.style.setProperty('--base', hexRgb(cal.bg).join(','));
+if (isLight(cal.bg)) document.documentElement.style.setProperty('--fg', '#1B2A41');
+
+let cfg = Object.assign({ focus: 25, short: 5, long: 15, every: 4, auto: false, sound: true }, load('pomoCfg', {}));
+let mode = 'focus';
+let total = cfg.focus * 60;          // 이번 시간 전체 (초)
+let left = total;                     // 남은 시간 (초)
+let endAt = 0;                        // 진행 중이면 끝나는 시각 (ms)
+let startedAt = null;                 // 이번 집중을 시작한 시각
+let cycle = load('pomoCycle', 0);     // 긴 휴식 전까지 끝낸 집중 수
+let timer = null;
+
+const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const running = () => !!timer;
+
+function setMode(m, keepRunning) {
+  mode = m; total = cfg[m] * 60; left = total; endAt = 0; startedAt = null;
+  if (!keepRunning) stop();
+  document.documentElement.style.setProperty('--ring', COLOR[m]);
+  draw();
+}
+function draw() {
+  $('clock').textContent = fmt(Math.max(0, Math.ceil(left)));
+  $('label').textContent = LABEL[mode] + (running() ? '' : (left < total ? ' · 멈춤' : ''));
+  $('prog').style.strokeDashoffset = (282.74 * (1 - left / total)).toFixed(2);
+  document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
+  $('start').innerHTML = running() ? PAUSE : PLAY; $('start').title = running() ? '일시정지' : '시작';
+  // 창 제목 (작업 표시줄·알림에 쓰임)
+  document.title = running() ? `${fmt(Math.ceil(left))} ${LABEL[mode]}` : '뽀모도로';
+  // 오늘 몇 번 했는지, 긴 휴식까지 남은 수
+  const today = live(load('pomoLog', [])).filter(r => r.date === key(new Date()));
+  $('today').textContent = `오늘 🍅 ${today.length}회 · ${today.reduce((a, r) => a + r.minutes, 0)}분`;
+  $('dots').innerHTML = Array.from({ length: cfg.every }, (_, i) => `<i class="${i < cycle ? 'done' : ''}"></i>`).join('');
+}
+function start() {
+  if (running()) return;
+  if (mode === 'focus' && !startedAt) startedAt = new Date().toISOString();
+  endAt = Date.now() + left * 1000;
+  timer = setInterval(tick, 250);
+  draw();
+}
+function stop() { clearInterval(timer); timer = null; }
+function pause() { if (!running()) return; left = Math.max(0, (endAt - Date.now()) / 1000); stop(); draw(); }
+function tick() {
+  left = Math.max(0, (endAt - Date.now()) / 1000);
+  if (left <= 0) finish(true); else draw();
+}
+
+// 한 번이 끝났을 때 (done=false 이면 건너뛰기)
+function finish(done) {
+  stop();
+  if (mode === 'focus' && done) {
+    // 끝낸 집중은 기록 → 뽀모도로 달력에 표시
+    const log = load('pomoLog', []);
+    const now = new Date();
+    log.push(touch({ id: uid(), date: key(now), start: startedAt || new Date(now - total * 1000).toISOString(), end: now.toISOString(),
+                     minutes: Math.round(total / 60), task: $('task').value.trim() }));
+    save('pomoLog', log);
+  }
+  let next;
+  if (mode === 'focus') {
+    if (done) cycle += 1;
+    if (cycle >= cfg.every) { next = 'long'; cycle = 0; } else next = 'short';
+  } else next = 'focus';
+  save('pomoCycle', cycle);
+  if (done) {
+    const msg = mode === 'focus' ? `집중 ${cfg.focus}분 끝! ${LABEL[next]} 시간이에요.` : '휴식 끝! 다시 집중해 볼까요?';
+    window.api.notify('🍅 뽀모도로', msg);
+    if (cfg.sound) beep();
+  }
+  setMode(next);
+  if (done && cfg.auto) start();
+}
+
+// 짧은 알림 소리 (딩-동)
+function beep() {
+  try {
+    const ac = new AudioContext();
+    [[880, 0], [660, .22]].forEach(([f, t]) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.frequency.value = f; o.type = 'sine';
+      g.gain.setValueAtTime(0.0001, ac.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.3, ac.currentTime + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + t + 0.5);
+      o.connect(g).connect(ac.destination); o.start(ac.currentTime + t); o.stop(ac.currentTime + t + 0.55);
+    });
+    setTimeout(() => ac.close(), 1200);
+  } catch {}
+}
+
+$('start').onclick = () => running() ? pause() : start();
+$('reset').onclick = () => setMode(mode);
+$('skip').onclick = () => finish(false);
+document.querySelectorAll('#modes button').forEach(b => b.onclick = () => {
+  if (b.dataset.m === mode) return;
+  if (running() && !confirm('타이머가 돌아가는 중이에요. 바꿀까요?')) return;
+  setMode(b.dataset.m);
+});
+
+// 시간 설정
+const fields = { sFocus: 'focus', sShort: 'short', sLong: 'long', sEvery: 'every' };
+$('setBtn').onclick = () => {
+  for (const id in fields) $(id).value = cfg[fields[id]];
+  $('sAuto').checked = cfg.auto; $('sSound').checked = cfg.sound;
+  $('setup').classList.toggle('open');
+};
+$('sDone').onclick = () => {
+  for (const id in fields) { const v = Math.round(+$(id).value); if (v >= +$(id).min && v <= +$(id).max) cfg[fields[id]] = v; }
+  cfg.auto = $('sAuto').checked; cfg.sound = $('sSound').checked;
+  save('pomoCfg', cfg);
+  $('setup').classList.remove('open');
+  if (!running() && left === total) setMode(mode); else draw();
+};
+
+$('top').onclick = () => window.api.pomoAction('top');
+$('close').onclick = () => {
+  if (running() && !confirm('타이머가 돌아가는 중이에요. 끌까요?')) return;
+  window.api.pomoAction('close');
+};
+window.api.onPomo(s => { if ('onTop' in s) $('top').classList.toggle('on', !!s.onTop); });
+// 달력에서 기록을 지우면 오늘 횟수도 맞춘다
+window.addEventListener('storage', e => { if (e.key === 'pomoLog') draw(); });
+
+setMode('focus');
+</script>
+</body>
+</html>

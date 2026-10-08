@@ -8,6 +8,7 @@ if (process.platform === 'win32') app.setAppUserModelId('com.ilsang.desktopcalen
 app.commandLine.appendSwitch('disable-features', 'UserAgentClientHint');
 const { createPet } = require('./pet');
 const { createYouTube } = require('./youtube');
+const { createPomodoro } = require('./pomodoro');
 
 const stateFile = path.join(app.getPath('userData'), 'window-v2.json');
 function loadState() {
@@ -164,7 +165,7 @@ function setMemoLocked(on) {
 function notifyRenderers() {
   const s = { mode, locked: !!state.locked, memoLocked: !!state.memoLocked, memoVisible: state.memoVisible !== false, version: app.getVersion(),
              pet: { visible: state.petVisible !== false, size: state.petSize || 96, custom: !!(state.petImage || state.petPack) },
-             ytVisible: yt.visible() };
+             ytVisible: yt.visible(), pomoVisible: pomo.visible() };
   allWindows().forEach(m => m.win.webContents.send('state', s));
   buildTrayMenu();
 }
@@ -228,12 +229,21 @@ const yt = createYouTube({
 });
 const setYoutube = on => { on ? yt.show() : yt.close(); };
 
+// ── 뽀모도로 창 ──
+const pomo = createPomodoro({
+  getState: () => state, saveState,
+  preload: path.join(__dirname, 'preload.js'),
+  onVisibilityChange: () => notifyRenderers(),
+});
+const setPomodoro = on => { on ? pomo.show() : pomo.close(); };
+
 let tray, quitting = false;
 function buildTrayMenu() {
   if (!tray) return;
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: mode === 'desktop' ? '일정 편집하기 (Ctrl+Alt+C)' : '바탕화면에 고정하기 (Ctrl+Alt+C)', click: toggleMode },
     { label: '메모 창 보이기', type: 'checkbox', checked: state.memoVisible !== false, click: (i) => setMemoVisible(i.checked) },
+    { label: '뽀모도로 타이머', type: 'checkbox', checked: pomo.visible(), click: (i) => setPomodoro(i.checked) },
     { label: '유튜브 창', type: 'checkbox', checked: yt.visible(), click: (i) => setYoutube(i.checked) },
     { label: '캐릭터 보이기', type: 'checkbox', checked: state.petVisible !== false, click: (i) => setPet({ visible: i.checked }) },
     { label: '달력 위치·크기 잠금', type: 'checkbox', checked: !!state.locked, click: (i) => setLocked(i.checked) },
@@ -358,6 +368,8 @@ ipcMain.on('reset', () => {
   if (main) main.focus();
   setTimeout(keepMemoAbove, 300);
 });
+ipcMain.on('pomo-visible', (_e, on) => setPomodoro(on));
+ipcMain.on('pomo-action', (_e, name) => pomo.action(name));
 ipcMain.on('yt-visible', (_e, on) => setYoutube(on));
 ipcMain.on('yt-action', (_e, name, arg) => yt.action(name, arg));
 ipcMain.on('pet-set', (_e, o) => setPet(o || {}));
