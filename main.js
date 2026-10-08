@@ -1,6 +1,11 @@
 const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, globalShortcut, nativeImage, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
+// 윈도우 작업 표시줄이 이 앱을 알아보게 (작업 표시줄 버튼·알림에 필요)
+if (process.platform === 'win32') app.setAppUserModelId('com.ilsang.desktopcalendar');
+// 구글 로그인 차단을 피하려고 크롬 전용 브라우저 정보(User-Agent Client Hints)를 끈다
+app.commandLine.appendSwitch('disable-features', 'UserAgentClientHint');
 const { createPet } = require('./pet');
 const { createYouTube } = require('./youtube');
 

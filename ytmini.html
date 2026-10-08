@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>유튜브 음악 바</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:transparent; overflow:hidden; user-select:none; font-family:'Malgun Gothic','Segoe UI',sans-serif; }
+  /* 화면 아래쪽의 작은 음악 바: 빈 곳을 끌면 옮겨진다 */
+  .pill { position:absolute; inset:3px; display:flex; align-items:center; gap:2px; padding:0 6px 0 10px; border-radius:20px;
+          background:rgba(24,24,24,.94); color:#F1F1F1; box-shadow:0 2px 8px rgba(0,0,0,.45); -webkit-app-region:drag; }
+  .logo { width:18px; height:13px; flex:none; margin-right:4px; }
+  .title { flex:1; min-width:0; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.9; }
+  button { -webkit-app-region:no-drag; flex:none; width:28px; height:28px; border:0; border-radius:50%; background:transparent; color:#EEE;
+           display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
+  button:hover { background:rgba(255,255,255,.14); color:#FFF; }
+  button:disabled { opacity:.35; cursor:default; background:transparent; }
+  button svg { width:14px; height:14px; }
+  #toggle svg { width:16px; height:16px; }
+  #close:hover { background:#E81123; }
+</style>
+</head>
+<body>
+<div class="pill" title="끌어서 옮기기 · 더블클릭하면 유튜브 창 열기">
+  <svg class="logo" viewBox="0 0 28 20" aria-hidden="true"><rect width="28" height="20" rx="5" fill="#FF0000"/><path d="M11 5.5v9l8-4.5z" fill="#FFF"/></svg>
+  <div class="title" id="title">유튜브</div>
+  <button id="prev" title="이전"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2.5v14H6zM20 5v14L9.5 12z"/></svg></button>
+  <button id="toggle" title="재생/일시정지"></button>
+  <button id="next" title="다음"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 5H18v14h-2.5zM4 5v14l10.5-7z"/></svg></button>
+  <button id="restore" title="유튜브 창 다시 열기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7"/></svg></button>
+  <button id="close" title="유튜브 끄기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const act = n => window.api.ytAction(n);
+const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>';
+const PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>';
+$('prev').onclick = () => act('prev');
+$('toggle').onclick = () => act('toggle');
+$('next').onclick = () => act('next');
+$('restore').onclick = () => act('restore');
+$('close').onclick = () => act('close');
+document.querySelector('.pill').addEventListener('dblclick', e => { if (!e.target.closest('button')) act('restore'); });
+function show(s) {
+  $('title').textContent = s.title || '유튜브';
+  $('title').title = s.title || '';
+  $('toggle').innerHTML = s.playing ? PAUSE : PLAY;
+  $('toggle').title = s.playing ? '일시정지' : '재생';
+  ['prev', 'toggle', 'next'].forEach(id => $(id).disabled = !s.has);
+}
+window.api.onYt(show);
+show({});
+</script>
+</body>
+</html>

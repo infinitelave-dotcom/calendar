@@ -7,11 +7,15 @@ const { BrowserWindow, WebContentsView, nativeImage, screen, shell, app } = requ
 const path = require('path');
 
 const BAR = 34;                                   // 위쪽 띠 높이
+// 구글은 "앱 안에 들어간 브라우저"의 로그인을 막는다. 크롬 흉내는 들키기 쉬워서
+// 일반 파이어폭스로 보이게 하고, 크롬만 보내는 브라우저 정보(sec-ch-ua)는 빼고 보낸다.
+const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0';
+let sessionReady = false;
 const HOME = process.env.DC_YT_HOME || 'https://www.youtube.com/';
 const isYouTube = u => { try { const h = new URL(u).hostname; return /(^|\.)youtube\.com$|(^|\.)youtu\.be$|(^|\.)google\.com$|(^|\.)gstatic\.com$/.test(h); } catch { return false; } };
 
 function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
-  let win = null, view = null, poll = null, dragTimer = null;
+  let win = null, view = null, poll = null, dragTimer = null, mini = null;
   let media = { playing: false, title: '', has: false };
   const st = () => getState();
   const icon = n => nativeImage.createFromPath(path.join(__dirname, `yt-${n}.png`));
@@ -56,6 +60,7 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
       const t = (media.playing ? '▶ ' : '') + (media.title || '유튜브');
       win.setTitle(t);
       win.webContents.send('yt-state', { title: media.title, playing: media.playing, canBack: view.webContents.navigationHistory.canGoBack() });
+      sendMini();
     }
   }
 
@@ -75,11 +80,22 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
     win.loadFile(path.join(__dirname, 'youtube.html'));
 
     view = new WebContentsView({
-      webPreferences: { partition: 'persist:youtube', backgroundThrottling: false, sandbox: true, contextIsolation: true },
+      webPreferences: { partition: 'persist:youtube', backgroundThrottling: false, sandbox: true, contextIsolation: true,
+                        preload: path.join(__dirname, 'yt-view-preload.js') },
     });
     win.contentView.addChildView(view);
-    // "Electron" 이 들어간 브라우저 이름이면 유튜브·구글 로그인이 막힐 수 있어 일반 크롬 이름으로
-    view.webContents.setUserAgent(app.userAgentFallback.replace(/ Electron\/\S+/, '').replace(/ desktop-calendar\/\S+/, ''));
+    view.webContents.setUserAgent(FIREFOX_UA);
+    if (!sessionReady) {
+      sessionReady = true;
+      const ses = view.webContents.session;
+      ses.setUserAgent(FIREFOX_UA);
+      ses.webRequest.onBeforeSendHeaders((d, cb) => {
+        const h = d.requestHeaders;
+        for (const k of Object.keys(h)) if (/^sec-ch-ua/i.test(k)) delete h[k];
+        h['User-Agent'] = FIREFOX_UA;
+        cb({ requestHeaders: h });
+      });
+    }
     // 유튜브 밖의 링크는 평소 쓰는 브라우저로 연다
     view.webContents.setWindowOpenHandler(({ url }) => {
       if (isYouTube(url)) view.webContents.loadURL(url); else if (/^https?:/.test(url)) shell.openExternal(url);
@@ -106,12 +122,51 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
     const saveBounds = () => { clearTimeout(saveT); saveT = setTimeout(() => {
       if (win && !win.isDestroyed() && !win.isMinimized() && !win.isFullScreen()) remember({ bounds: win.getBounds() }); }, 400); };
     win.on('move', saveBounds); win.on('resize', saveBounds);
-    win.on('show', updateThumbar);
-    win.on('restore', updateThumbar);
+    // 작업 표시줄 버튼이 만들어진 다음에 ⏮ ⏯ ⏭ 를 달아야 해서, 보일 때마다 조금 뒤에 다시 단다
+    const thumbLater = () => { win && win.setSkipTaskbar(false); setTimeout(updateThumbar, 600); setTimeout(updateThumbar, 2000); };
+    win.once('ready-to-show', thumbLater);
+    win.on('show', thumbLater);
+    win.on('restore', () => { thumbLater(); hideMini(); });
+    win.on('minimize', () => { showMini(); });
     win.on('close', () => { remember({ visible: false }); onVisibilityChange && onVisibilityChange(); });
-    win.on('closed', () => { clearInterval(poll); poll = null; win = null; view = null; });
+    win.on('closed', () => { clearInterval(poll); poll = null; win = null; view = null; destroyMini(); });
     win.webContents.on('did-finish-load', () => { win.webContents.send('yt-state', { title: media.title, playing: media.playing, onTop: !!s.onTop }); updateThumbar(); });
     poll = setInterval(check, 1000);
+  }
+
+  // ── 최소화했을 때 화면 아래쪽에 뜨는 작은 음악 바 ──
+  function showMini() {
+    if (!win) return;
+    if (!mini || mini.isDestroyed()) {
+      const wa = screen.getPrimaryDisplay().workArea;
+      const m = (st().yt || {}).mini;
+      const W = 300, H = 46;
+      mini = new BrowserWindow({
+        width: W, height: H,
+        x: m ? m.x : wa.x + wa.width - W - 16, y: m ? m.y : wa.y + wa.height - H - 12,
+        frame: false, transparent: true, resizable: false, skipTaskbar: true, alwaysOnTop: true,
+        minimizable: false, maximizable: false, fullscreenable: false, hasShadow: false, focusable: true,
+        webPreferences: { preload },
+      });
+      mini.setAlwaysOnTop(true, 'floating');
+      mini.setMenu(null);
+      mini.loadFile(path.join(__dirname, 'ytmini.html'));
+      mini.webContents.on('did-finish-load', sendMini);
+      mini.on('moved', () => { const [x, y] = mini.getPosition(); remember({ mini: { x, y } }); });
+      mini.on('closed', () => { mini = null; });
+    } else {
+      mini.showInactive();
+    }
+    sendMini();
+  }
+  function hideMini() { if (mini && !mini.isDestroyed()) mini.hide(); }
+  function destroyMini() { if (mini && !mini.isDestroyed()) mini.destroy(); mini = null; }
+  function sendMini() { if (mini && !mini.isDestroyed()) mini.webContents.send('yt-state', { title: media.title, playing: media.playing, has: media.has }); }
+  function restore() {
+    if (!win) return;
+    hideMini();
+    if (win.isMinimized()) win.restore();
+    win.show(); win.focus();
   }
 
   function remember(part) {
@@ -135,7 +190,9 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
     if (!win) return;
     const wc = view.webContents;
     switch (name) {
-      case 'min': win.minimize(); break;
+      case 'min': win.minimize(); showMini(); break;
+      case 'restore': restore(); break;
+      case 'miniMoved': if (mini && !mini.isDestroyed()) { const [x, y] = mini.getPosition(); remember({ mini: { x, y } }); } break;
       case 'close': close(); break;
       case 'home': wc.loadURL(HOME); break;
       case 'back': if (wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack(); break;
