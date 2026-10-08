@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>유튜브</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:#0F0F0F; color:#F1F1F1; font-family:'Malgun Gothic','Segoe UI',sans-serif; user-select:none; overflow:hidden; }
+  /* 위쪽 띠 (34px): 끌어서 창 이동 */
+  .bar { height:34px; display:flex; align-items:center; gap:4px; padding:0 6px; background:#1A1A1A; -webkit-app-region:drag; border-bottom:1px solid #2A2A2A; }
+  .logo { width:22px; height:16px; flex:none; margin:0 2px; }
+  button { -webkit-app-region:no-drag; background:transparent; border:0; color:#DDD; width:28px; height:26px; border-radius:6px; cursor:pointer;
+           display:flex; align-items:center; justify-content:center; flex:none; padding:0; }
+  button:hover { background:rgba(255,255,255,.12); color:#FFF; }
+  button:disabled { opacity:.3; cursor:default; background:transparent; }
+  button.on { background:rgba(255,255,255,.18); color:#FFF; }
+  button svg { width:16px; height:16px; }
+  #close:hover { background:#E81123; }
+  form { flex:1; min-width:0; display:flex; -webkit-app-region:no-drag; }
+  input { flex:1; min-width:0; height:24px; background:#121212; border:1px solid #303030; border-radius:12px; color:#F1F1F1; padding:0 10px; font-size:12px; outline:none; font-family:inherit; }
+  input:focus { border-color:#3EA6FF; }
+  input::placeholder { color:#888; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <svg class="logo" viewBox="0 0 28 20" aria-hidden="true"><rect width="28" height="20" rx="5" fill="#FF0000"/><path d="M11 5.5v9l8-4.5z" fill="#FFF"/></svg>
+  <button id="back" title="뒤로" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button id="home" title="유튜브 홈"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9h-5v-6h-6v6H4z"/></svg></button>
+  <form id="f"><input id="q" placeholder="검색 또는 유튜브 주소 붙여넣기" spellcheck="false"></form>
+  <button id="top" title="항상 위에 두기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.8V5h6v5.8l2.5 3.2h-11z"/></svg></button>
+  <button id="min" title="최소화 (작업 표시줄에서 ⏮ ⏯ ⏭ 로 조작)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 17h12"/></svg></button>
+  <button id="close" title="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const act = (n, a) => window.api.ytAction(n, a);
+$('back').onclick = () => act('back');
+$('home').onclick = () => act('home');
+$('top').onclick = () => act('top');
+$('min').onclick = () => act('min');
+$('close').onclick = () => act('close');
+$('f').onsubmit = e => { e.preventDefault(); act('search', $('q').value); $('q').blur(); };
+// 위쪽 띠를 더블클릭하면 재생/일시정지
+document.querySelector('.bar').addEventListener('dblclick', e => { if (!e.target.closest('button, form')) act('toggle'); });
+window.api.onYt(s => {
+  if ('onTop' in s) $('top').classList.toggle('on', !!s.onTop);
+  if ('canBack' in s) $('back').disabled = !s.canBack;
+});
+</script>
+</body>
+</html>

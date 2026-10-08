@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('api', {
   petDrag: (on, click) => ipcRenderer.send('pet-drag', on, click),
   petDouble: () => ipcRenderer.send('pet-double'),
   onPet: (ch, cb) => { if (ch === 'pet-config' || ch === 'pet-state') ipcRenderer.on(ch, (_e, d) => cb(d)); },
+  // 유튜브 창
+  setYoutube: (on) => ipcRenderer.send('yt-visible', on),
+  ytAction: (name, arg) => ipcRenderer.send('yt-action', name, arg),
+  onYt: (cb) => ipcRenderer.on('yt-state', (_e, s) => cb(s)),
   onState: (cb) => ipcRenderer.on('state', (_e, s) => cb(s)),
   notify: (t, b) => ipcRenderer.send('notify', t, b),
   quit: () => ipcRenderer.send('quit')

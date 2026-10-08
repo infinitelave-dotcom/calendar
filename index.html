@@ -34,6 +34,9 @@
   header .sp { flex:1; }
   .icon-btn { display:flex; align-items:center; gap:6px; white-space:nowrap; }
   .icon-btn svg { width:18px; height:18px; }
+  /* 창이 좁으면 위쪽 버튼은 그림만 (마우스를 올리면 이름이 보임) */
+  @media (max-width: 1180px) { .icon-btn .lbl { display:none; } .icon-btn { padding:6px 9px; } }
+  header { min-width:0; }
   .icon-btn.on { background:var(--accent); color:#1B2A41; text-shadow:none; }
   .dows, .days { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:4px; }
   .dow { text-align:center; font-size:16px; font-weight:700; padding:4px 0; }
@@ -141,13 +144,16 @@
       <button id="todayBtn">오늘</button>
       <div class="sp"></div>
       <button id="memoBtn" class="icon-btn" title="메모 창 보이기/숨기기">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11l-5 5H4z"/><path d="M15 20v-5h5"/></svg>메모
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11l-5 5H4z"/><path d="M15 20v-5h5"/></svg><span class="lbl">메모</span>
+      </button>
+      <button id="ytBtn" class="icon-btn" title="작은 유튜브 창 열기/닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/></svg><span class="lbl">유튜브</span>
       </button>
       <button id="lockBtn" class="icon-btn" title="달력 위치·크기 잠금 (메모는 메모 창의 자물쇠로 따로 잠급니다)"></button>
       <button id="pinBtn" class="icon-btn" title="바탕화면 아이콘 뒤로 고정 (Ctrl+Alt+C)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76V6h6v4.76l2.5 3.24h-11z"/><path d="M8 3h8"/></svg>고정
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76V6h6v4.76l2.5 3.24h-11z"/><path d="M8 3h8"/></svg><span class="lbl">고정</span>
       </button>
-      <button id="gear">⚙ 설정</button>
+      <button id="gear" class="icon-btn" title="설정">⚙<span class="lbl">설정</span></button>
     </header>
     <div class="tools">
       <div class="search" id="searchBox">
@@ -228,8 +234,8 @@
 const DOW = ['일','월','화','수','목','금','토'];
 const EV_COLORS = ['#F2A65A','#FF8A80','#FFD166','#8BD3A0','#7FC8F8','#B69CFF','#F4A6D7','#D9D9D9'];
 const FG_COLORS = ['#FFFFFF','#F6F4EE','#FFE8A3','#1B2A41','#000000'];
-const LOCK_ON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>잠김';
-const LOCK_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>잠금';
+const LOCK_ON  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="lbl">잠김</span>';
+const LOCK_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg><span class="lbl">잠금</span>';
 
 const key = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const parse = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m-1, d); };
@@ -553,14 +559,16 @@ $('resetAll').onclick = () => {
 };
 
 // 잠금 / 바탕화면 고정 / 메모 창
-let locked = false, memoVisible = true;
+let locked = false, memoVisible = true, ytVisible = false;
 function showButtons() {
   $('lockBtn').innerHTML = locked ? LOCK_ON : LOCK_OFF;
   $('lockBtn').classList.toggle('on', locked);
   $('memoBtn').classList.toggle('on', memoVisible);
+  $('ytBtn').classList.toggle('on', ytVisible);
   document.body.classList.toggle('locked', locked);
 }
 $('lockBtn').onclick = () => { locked = !locked; showButtons(); window.api.setLocked(locked); };
+$('ytBtn').onclick = () => { ytVisible = !ytVisible; showButtons(); window.api.setYoutube(ytVisible); };
 $('memoBtn').onclick = () => { memoVisible = !memoVisible; showButtons(); window.api.setMemoVisible(memoVisible); };
 $('pinBtn').onclick = () => { $('settings').classList.remove('open'); window.api.desktopMode(); };
 window.api.onState(s => {
@@ -569,7 +577,7 @@ window.api.onState(s => {
     if (document.activeElement !== $('petSize')) $('petSize').value = s.pet.size;
     $('petDefault').disabled = !s.pet.custom; $('petDefault').style.opacity = s.pet.custom ? 1 : .5;
   }
-  locked = s.locked; memoVisible = s.memoVisible; showButtons();
+  locked = s.locked; memoVisible = s.memoVisible; ytVisible = !!s.ytVisible; showButtons();
   if (s.version) $('versionRow').textContent = `현재 버전 ${s.version}`;
 });
 showButtons();
