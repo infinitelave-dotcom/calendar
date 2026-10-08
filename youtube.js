@@ -11,7 +11,7 @@ const HOME = process.env.DC_YT_HOME || 'https://www.youtube.com/';
 const isYouTube = u => { try { const h = new URL(u).hostname; return /(^|\.)youtube\.com$|(^|\.)youtu\.be$|(^|\.)google\.com$|(^|\.)gstatic\.com$/.test(h); } catch { return false; } };
 
 function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
-  let win = null, view = null, poll = null;
+  let win = null, view = null, poll = null, dragTimer = null;
   let media = { playing: false, title: '', has: false };
   const st = () => getState();
   const icon = n => nativeImage.createFromPath(path.join(__dirname, `yt-${n}.png`));
@@ -147,6 +147,20 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
         else wc.loadURL('https://www.youtube.com/results?search_query=' + encodeURIComponent(q));
         break;
       }
+      case 'dragStart': {
+        // 마우스를 따라 창 옮기기 (잡은 위치 그대로 유지)
+        if (win.isFullScreen()) break;
+        const c = screen.getCursorScreenPoint(), [wx, wy] = win.getPosition(), [ww, wh] = win.getSize();
+        const off = { x: c.x - wx, y: c.y - wy };
+        clearInterval(dragTimer);
+        dragTimer = setInterval(() => {
+          if (!win || win.isDestroyed()) { clearInterval(dragTimer); return; }
+          const p = screen.getCursorScreenPoint();
+          win.setBounds({ x: p.x - off.x, y: p.y - off.y, width: ww, height: wh });
+        }, 16);
+        break;
+      }
+      case 'dragEnd': clearInterval(dragTimer); dragTimer = null; break;
       case 'toggle': control.toggle(); break;
       case 'next': control.next(); break;
       case 'prev': control.prev(); break;
