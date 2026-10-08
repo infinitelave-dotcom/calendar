@@ -123,8 +123,10 @@
   .primary:hover { background:var(--accent); filter:brightness(1.1); }
   .hint { font-size:12px; color:var(--muted); }
 
-  #settings { display:none; position:absolute; top:0; left:14px; right:0; z-index:5; max-height:100%; overflow-y:auto;
-              background:rgb(var(--base)); border:1px solid var(--line); box-shadow:0 8px 24px rgba(0,0,0,.35); }
+  /* 설정은 달력과 같은 배경(색·투명도 그대로)을 쓴다. 설정이 열려 있는 동안 뒤의 일정 목록은 감춘다 */
+  #settings { display:none; position:absolute; top:0; bottom:0; left:14px; right:0; z-index:5; overflow-y:auto;
+              background:transparent; border:0; box-shadow:none; padding:0 4px 0 0; }
+  #side:has(#settings.open) > :not(#settings) { visibility:hidden; }
   #settings.open { display:flex; }
   #settings > * { flex:none; }
   #settings .row { display:flex; align-items:center; gap:8px; font-size:14px; }
