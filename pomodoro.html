@@ -36,6 +36,13 @@
   @keyframes spin { to { transform:rotate(360deg); } }
   .disc .arm { transform-origin:84px 50px; transition:transform .6s ease; transform:rotate(-18deg); }
   body.running .disc .arm { transform:rotate(0deg); }
+  /* 사진을 넣으면 레코드판 대신 둥근 사각형 표지 (재생 중엔 살짝 커짐) */
+  #art { display:none; width:100%; height:100%; object-fit:cover; border-radius:18px; box-shadow:0 8px 22px rgba(0,0,0,.35);
+         transform:scale(.92); transition:transform .5s ease; -webkit-user-drag:none; }
+  body.running #art { transform:scale(1); }
+  body.hasArt .disc svg { display:none; }
+  body.hasArt #art { display:block; }
+  body.hasArt .disc { width:168px; height:168px; }
 
   .title { margin-top:16px; font-size:24px; font-weight:400; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sub { font-size:14px; opacity:.6; margin-top:2px; }
@@ -110,6 +117,7 @@
         </g>
         <g class="arm"><path d="M84 50v24"/><rect x="80.5" y="54" width="7" height="12" rx="3" fill="none"/><path d="M84 74v8"/></g>
       </svg>
+      <img id="art" alt="">
     </div>
 
     <div class="title" id="title">집중</div>
@@ -145,9 +153,10 @@
     <h4>배경 (달력과 따로)</h4>
     <div class="presets" id="presets"></div>
     <div class="row2">직접 고르기 <input type="color" id="c1"> <input type="color" id="c2"></div>
-    <div class="row2"><button class="sbtn" id="pickImg">🖼 사진으로</button><button class="sbtn" id="clearImg">사진 지우기</button><input type="file" id="file" accept="image/*" hidden></div>
-    <label>사진 흐리게 <input type="range" id="blur" min="0" max="24"></label>
-    <div class="note">사진은 5MB 이하만 쓸 수 있어요.</div>
+    <h4>가운데 사진 (앨범 표지처럼)</h4>
+    <div class="row2"><button class="sbtn" id="pickImg">🖼 사진 넣기</button><button class="sbtn" id="clearImg">레코드판으로 되돌리기</button><input type="file" id="file" accept="image/*" hidden></div>
+    <label>배경 흐리게 <input type="range" id="blur" min="0" max="30"></label>
+    <div class="note">사진을 넣으면 가운데 레코드판이 그 사진(둥근 사각형)으로 바뀌고, 배경에도 흐리게 깔려요. 5MB 이하 사진만 쓸 수 있어요.</div>
     <button id="sDone">확인</button>
   </div>
 </div>
@@ -170,13 +179,16 @@ const PRESETS = {
   night:    ['#2B2E4A', '#5B4C77', '#1B1D2E'],
 };
 const gradient = c => `linear-gradient(160deg, ${c[0]} 0%, ${c[1]} 50%, ${c[2] || c[1]} 100%)`;
-let bg = Object.assign({ preset: 'sunday', c1: '#D4575F', c2: '#5D5FA0', image: null, blur: 10 }, load('pomoBg', {}));
+let bg = Object.assign({ preset: 'sunday', c1: '#D4575F', c2: '#5D5FA0', image: null, blur: 18 }, load('pomoBg', {}));
 function applyBg() {
   const colors = bg.preset === 'custom' ? [bg.c1, bg.c2] : PRESETS[bg.preset] || PRESETS.sunday;
   $('bg').style.background = gradient(colors);
   const img = $('bgImg');
   if (bg.image) { img.style.display = 'block'; img.style.backgroundImage = `url("${bg.image}")`; img.style.filter = `blur(${bg.blur}px)`; }
   else img.style.display = 'none';
+  // 가운데: 사진이 있으면 둥근 사각형 표지, 없으면 레코드판
+  document.body.classList.toggle('hasArt', !!bg.image);
+  if (bg.image) $('art').src = bg.image; else $('art').removeAttribute('src');
   $('glow').style.display = bg.image ? 'none' : 'block';
   $('shade').style.background = bg.image ? 'rgba(0,0,0,.28)' : 'rgba(0,0,0,.12)';
   // 설정 화면 표시 맞추기
