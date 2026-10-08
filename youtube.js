@@ -1,9 +1,9 @@
 // ── 작은 유튜브 창 ─────────────────────────────────────────────
 // 메모 창처럼 작은 창에 유튜브를 띄운다. 위쪽 띠(youtube.html)는 우리 화면이고,
 // 그 아래 유튜브 페이지는 따로 분리된 WebContentsView 에 띄운다 (앱 기능에 손대지 못하게).
-// 최소화하면 작업 표시줄로 내려가고, 작업 표시줄 아이콘에 마우스를 올리면
-// 음악 앱처럼 ⏮ ⏯ ⏭ 버튼이 미리보기 아래에 나온다 (윈도우 전용).
-const { BrowserWindow, WebContentsView, nativeImage, screen, shell, app } = require('electron');
+// 작업 표시줄에는 따로 버튼을 만들지 않고, 대신 오른쪽 아래 알림 영역(시계 옆)에 유튜브 아이콘을 둔다.
+// 아이콘 클릭 = 창 보이기/숨기기, 오른쪽 클릭 = ⏮ ⏯ ⏭ 메뉴. ✕ 를 누르면 소리까지 완전히 꺼진다.
+const { BrowserWindow, WebContentsView, nativeImage, screen, shell, app, Tray, Menu } = require('electron');
 const path = require('path');
 
 const BAR = 34;                                   // 위쪽 띠 높이
@@ -15,7 +15,7 @@ const HOME = process.env.DC_YT_HOME || 'https://www.youtube.com/';
 const isYouTube = u => { try { const h = new URL(u).hostname; return /(^|\.)youtube\.com$|(^|\.)youtu\.be$|(^|\.)google\.com$|(^|\.)gstatic\.com$/.test(h); } catch { return false; } };
 
 function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
-  let win = null, view = null, poll = null, dragTimer = null, mini = null;
+  let win = null, view = null, poll = null, dragTimer = null, mini = null, tray = null;
   let media = { playing: false, title: '', has: false };
   const st = () => getState();
   const icon = n => nativeImage.createFromPath(path.join(__dirname, `yt-${n}.png`));
@@ -37,15 +37,28 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
                           const b = document.querySelector('.ytp-prev-button'); if (b && b.offsetParent !== null) b.click(); else history.back(); })()`),
   };
 
-  // 작업 표시줄 미리보기의 ⏮ ⏯ ⏭ 버튼
-  function updateThumbar() {
-    if (process.platform !== 'win32' || !win || win.isDestroyed()) return;
-    win.setThumbarButtons([
-      { tooltip: '이전', icon: icon('prev'), click: () => control.prev(), flags: media.has ? [] : ['disabled'] },
-      { tooltip: media.playing ? '일시정지' : '재생', icon: icon(media.playing ? 'pause' : 'play'), click: () => control.toggle(), flags: media.has ? [] : ['disabled'] },
-      { tooltip: '다음', icon: icon('next'), click: () => control.next(), flags: media.has ? [] : ['disabled'] },
-    ]);
+  // ── 알림 영역(시계 옆) 유튜브 아이콘 ──
+  function updateTray() {
+    if (!win) return;
+    if (!tray || tray.isDestroyed()) {
+      tray = new Tray(icon('tray'));
+      tray.on('click', () => { if (win && win.isVisible() && !win.isMinimized()) { win.hide(); showMini(); } else restore(); });
+    }
+    tray.setImage(icon(media.playing ? 'tray' : 'tray-paused'));
+    tray.setToolTip(((media.playing ? '▶ ' : '❚❚ ') + (media.title || '유튜브')).slice(0, 120));
+    const shown = win.isVisible() && !win.isMinimized();
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: (media.title || '유튜브').slice(0, 40), enabled: false },
+      { type: 'separator' },
+      { label: '⏮  이전', enabled: media.has, click: () => control.prev() },
+      { label: media.playing ? '❚❚  일시정지' : '▶  재생', enabled: media.has, click: () => control.toggle() },
+      { label: '⏭  다음', enabled: media.has, click: () => control.next() },
+      { type: 'separator' },
+      { label: shown ? '창 숨기기' : '창 보이기', click: () => { if (shown) { win.hide(); showMini(); } else restore(); } },
+      { label: '유튜브 끄기', click: () => close() },
+    ]));
   }
+  function destroyTray() { if (tray && !tray.isDestroyed()) tray.destroy(); tray = null; }
 
   // 1초마다 재생 상태와 제목을 확인해서 버튼 모양·창 제목을 맞춘다
   async function check() {
@@ -56,7 +69,7 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
     const changed = r.playing !== media.playing || r.has !== media.has || r.title !== media.title;
     media = r;
     if (changed) {
-      updateThumbar();
+      updateTray();
       const t = (media.playing ? '▶ ' : '') + (media.title || '유튜브');
       win.setTitle(t);
       win.webContents.send('yt-state', { title: media.title, playing: media.playing, canBack: view.webContents.navigationHistory.canGoBack() });
@@ -71,7 +84,7 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
     win = new BrowserWindow({
       ...b, minWidth: 260, minHeight: 180,
       frame: false, backgroundColor: '#0F0F0F', title: '유튜브',
-      skipTaskbar: false,                       // 작업 표시줄에 보여야 최소화·음악 버튼이 된다
+      skipTaskbar: true,                        // 작업 표시줄에는 따로 버튼을 만들지 않는다 (알림 영역 아이콘으로 대신)
       alwaysOnTop: !!s.onTop, minimizable: true, maximizable: false, fullscreenable: true,
       icon: path.join(__dirname, 'icon.png'),
       webPreferences: { preload },
@@ -122,15 +135,13 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
     const saveBounds = () => { clearTimeout(saveT); saveT = setTimeout(() => {
       if (win && !win.isDestroyed() && !win.isMinimized() && !win.isFullScreen()) remember({ bounds: win.getBounds() }); }, 400); };
     win.on('move', saveBounds); win.on('resize', saveBounds);
-    // 작업 표시줄 버튼이 만들어진 다음에 ⏮ ⏯ ⏭ 를 달아야 해서, 보일 때마다 조금 뒤에 다시 단다
-    const thumbLater = () => { win && win.setSkipTaskbar(false); setTimeout(updateThumbar, 600); setTimeout(updateThumbar, 2000); };
-    win.once('ready-to-show', thumbLater);
-    win.on('show', thumbLater);
-    win.on('restore', () => { thumbLater(); hideMini(); });
-    win.on('minimize', () => { showMini(); });
-    win.on('close', () => { remember({ visible: false }); onVisibilityChange && onVisibilityChange(); });
-    win.on('closed', () => { clearInterval(poll); poll = null; win = null; view = null; destroyMini(); });
-    win.webContents.on('did-finish-load', () => { win.webContents.send('yt-state', { title: media.title, playing: media.playing, onTop: !!s.onTop }); updateThumbar(); });
+    win.on('show', () => { hideMini(); updateTray(); });
+    win.on('hide', updateTray);
+    win.on('restore', () => { hideMini(); updateTray(); });
+    win.on('minimize', () => { showMini(); updateTray(); });
+    win.on('close', () => { teardown(); remember({ visible: false, url: null }); onVisibilityChange && onVisibilityChange(); });
+    win.on('closed', () => { teardown(); win = null; });
+    win.webContents.on('did-finish-load', () => { win.webContents.send('yt-state', { title: media.title, playing: media.playing, onTop: !!s.onTop }); updateTray(); });
     poll = setInterval(check, 1000);
   }
 
@@ -166,7 +177,17 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
     if (!win) return;
     hideMini();
     if (win.isMinimized()) win.restore();
-    win.show(); win.focus();
+    win.show(); win.focus(); updateTray();
+  }
+
+  // 창을 닫을 때 유튜브 페이지 자체를 꺼야 소리가 멈춘다 (창만 닫으면 뒤에서 계속 재생됨)
+  function teardown() {
+    clearInterval(poll); poll = null;
+    clearInterval(dragTimer); dragTimer = null;
+    if (view && !view.webContents.isDestroyed()) { try { view.webContents.setAudioMuted(true); view.webContents.close(); } catch {} }
+    view = null;
+    destroyMini(); destroyTray();
+    media = { playing: false, title: '', has: false };
   }
 
   function remember(part) {
@@ -174,14 +195,16 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
   }
 
   function show() {
-    if (!win) create(); else { if (win.isMinimized()) win.restore(); win.show(); }
+    if (!win) create(); else { if (win.isMinimized()) win.restore(); win.show(); hideMini(); }
     win.focus();
     remember({ visible: true }); onVisibilityChange && onVisibilityChange();
   }
   // 닫기(✕): 창을 없애서 소리도 멈춘다
   function close() {
+    teardown();
     if (win) { const w = win; win = null; w.destroy(); }
-    remember({ visible: false }); onVisibilityChange && onVisibilityChange();
+    // ✕ 로 끄면 다음에는 유튜브 첫 화면부터 (보던 영상을 다시 틀지 않는다)
+    remember({ visible: false, url: null }); onVisibilityChange && onVisibilityChange();
   }
   const visible = () => !!win;
 
@@ -190,7 +213,7 @@ function createYouTube({ getState, saveState, preload, onVisibilityChange }) {
     if (!win) return;
     const wc = view.webContents;
     switch (name) {
-      case 'min': win.minimize(); showMini(); break;
+      case 'min': win.hide(); showMini(); break;
       case 'restore': restore(); break;
       case 'miniMoved': if (mini && !mini.isDestroyed()) { const [x, y] = mini.getPosition(); remember({ mini: { x, y } }); } break;
       case 'close': close(); break;
