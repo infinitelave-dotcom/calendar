@@ -177,7 +177,9 @@ function say(text, ms = 4000) {
 function talk() {
   const d = new Date();
   const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  const today = live(load('events2', [])).filter(e => e.start <= k && k <= e.end)
+  // 숨긴 캘린더의 일정은 말하지 않는다
+  const off = new Set(live(load('calendars', [])).filter(c => c.hidden).map(c => c.id));
+  const today = live(load('events2', [])).filter(e => !off.has(e.cal || 'main') && e.start <= k && k <= e.end)
     .sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
   if (today.length) {
     const lines = today.slice(0, 3).map(e => (e.time ? e.time + ' ' : '') + e.text);

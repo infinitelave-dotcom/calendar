@@ -36,7 +36,6 @@
   .icon-btn svg { width:18px; height:18px; }
   /* 창이 좁으면 위쪽 버튼은 그림만 (마우스를 올리면 이름이 보임) */
   @media (max-width: 1480px) { .icon-btn .lbl { display:none; } .icon-btn { padding:6px 9px; } }
-  @media (max-width: 1180px) { .viewtog .vt { display:none; } }
   @media (max-width: 1060px) { header h1 { font-size:24px; margin:0 4px; } header { gap:6px; } }
   header { min-width:0; }
   .icon-btn.on { background:var(--accent); color:#1B2A41; text-shadow:none; }
@@ -81,16 +80,39 @@
   .opq input { width:110px; }
   .opq span { width:36px; text-align:right; font-variant-numeric:tabular-nums; }
   /* 뽀모도로 달력 */
-  .viewtog { white-space:nowrap; flex:none; font-size:14px; }
-  .viewtog.on { background:#E8574F; color:#fff; text-shadow:none; font-weight:700; }
   body.pomo .search, body.pomo .cfilter, body.pomo #form { display:none !important; }
   .pcell { margin:2px 6px 0; display:flex; flex-direction:column; gap:2px; text-shadow:none; }
   .pcell .cnt { align-self:flex-start; background:#E8574F; color:#fff; border-radius:10px; padding:1px 8px; font-size:13px; font-weight:700; }
   .pcell .min { font-size:12px; color:var(--muted); text-shadow:var(--ts); padding-left:2px; }
   .pomo-card { display:flex; flex-direction:column; gap:8px; }
+  .pomo-card[hidden] { display:none; }
   .pomo-card .big { font-size:15px; }
   .pomo-open { background:#E8574F; color:#fff; font-weight:700; padding:9px; text-shadow:none; }
   .pomo-open:hover { background:#E8574F; filter:brightness(1.1); }
+  /* 캘린더 탭 (메모 시트처럼) */
+  .ctabs { display:flex; align-items:center; gap:4px; flex-wrap:wrap; position:relative; }
+  .ctab { display:flex; align-items:center; gap:2px; height:32px; padding:0 6px 0 12px; border-radius:9px; background:var(--softer);
+          font-size:14px; cursor:pointer; white-space:nowrap; max-width:220px; border:1px solid transparent; }
+  .ctab:hover { background:var(--soft); }
+  .ctab.on { background:var(--soft); border-color:var(--accent); font-weight:700; }
+  .ctab.pomo.on { border-color:#E8574F; }
+  .ctab .nm { overflow:hidden; text-overflow:ellipsis; padding-right:4px; }
+  .ctab .nm.blank { opacity:.55; font-style:italic; font-weight:400; }
+  .ctab .x { background:transparent; padding:0; width:22px; height:22px; border-radius:6px; font-size:12px; display:flex; align-items:center; justify-content:center; opacity:0; }
+  .ctab:hover .x, .ctab.on .x { opacity:.75; }
+  .ctab .x:hover { opacity:1; background:color-mix(in srgb, var(--fg) 20%, transparent); }
+  .ctab .x.del:hover { background:#E81123; color:#fff; }
+  .ctab .x svg { width:14px; height:14px; }
+  .ctab input.edit { width:110px; font-size:13px; padding:2px 5px; }
+  .cadd { width:32px; height:32px; padding:0; font-size:18px; border-radius:9px; }
+  .chid { font-size:13px; padding:5px 10px; color:var(--muted); background:transparent; }
+  .chid:hover { color:var(--fg); }
+  .hmenu { position:absolute; top:36px; z-index:20; min-width:200px; background:rgb(var(--base)); border:1px solid var(--line); border-radius:10px;
+           padding:6px; display:flex; flex-direction:column; gap:4px; box-shadow:0 6px 18px rgba(0,0,0,.4); }
+  .hmenu .t { font-size:12px; color:var(--muted); padding:2px 6px; }
+  .hmenu .r { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:7px; font-size:14px; }
+  .hmenu .r span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hmenu .r button { padding:3px 9px; font-size:12px; }
   /* 검색 · 색 보기 */
   .tools { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   .search { display:flex; align-items:center; gap:6px; background:var(--soft); border-radius:8px; padding:0 8px; flex:0 1 260px; min-width:150px; }
@@ -157,7 +179,6 @@
       <h1 id="title"></h1>
       <button id="next">▶</button>
       <button id="todayBtn">오늘</button>
-      <button id="pomoCalBtn" class="viewtog" title="뽀모도로 기록만 보는 달력으로 바꾸기">🍅<span class="vt"> 뽀모도로 달력</span></button>
       <div class="sp"></div>
       <button id="memoBtn" class="icon-btn" title="메모 창 보이기/숨기기">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11l-5 5H4z"/><path d="M15 20v-5h5"/></svg><span class="lbl">메모</span>
@@ -174,6 +195,7 @@
       </button>
       <button id="gear" class="icon-btn" title="설정">⚙<span class="lbl">설정</span></button>
     </header>
+    <div class="ctabs" id="ctabs"></div>
     <div class="tools">
       <div class="search" id="searchBox">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
@@ -274,6 +296,27 @@ if (!events) {   // 예전 형식(날짜별 목록)에서 옮기기
 }
 const saveEvents = () => save('events2', events);
 
+// ── 캘린더 여러 개 (메모 탭처럼): [{id, name, hidden, u, deleted}]
+// 'pomo' 는 뽀모도로 달력: 지울 수는 없고 숨기기만 된다
+let calendars = load('calendars', null);
+if (!calendars) calendars = [{ id: 'main', name: '내 캘린더', u: 0 }, { id: 'pomo', name: '뽀모도로 달력', u: 0 }];
+if (!calendars.some(c => c.id === 'pomo')) calendars.push({ id: 'pomo', name: '뽀모도로 달력', u: 0 });
+calendars.forEach(c => { if (c.id === 'pomo') c.deleted = false; });
+const saveCals = () => save('calendars', calendars);
+saveCals();
+const liveCals = () => live(calendars);
+const visibleCals = () => liveCals().filter(c => !c.hidden);
+const calOf = ev => ev.cal || 'main';
+let activeCal = load('activeCal', null) || (load('calMode', 'events') === 'pomo' ? 'pomo' : 'main');
+function fixActive() {
+  const v = visibleCals();
+  if (!v.some(c => c.id === activeCal)) activeCal = (v[0] || liveCals()[0]).id;
+  save('activeCal', activeCal);
+}
+fixActive();
+const isPomo = () => activeCal === 'pomo';
+const calEvents = () => live(events).filter(e => calOf(e) === activeCal);
+
 let cfg = loadCfg();
 let view = new Date(); view.setDate(1);
 let selStart = key(new Date()), selEnd = selStart;
@@ -294,12 +337,12 @@ let colorFilter = new Set(load('colorFilter', []));   // 비어 있으면 모든
 const norm = t => t.toLowerCase().replace(/\s+/g, '');
 const passes = ev => (!colorFilter.size || colorFilter.has(ev.color.toLowerCase()))
                     && (!query || norm(ev.text).includes(norm(query)));
-const shown = () => live(events).filter(passes);
+const shown = () => calEvents().filter(passes);
 
 function renderFilter() {
   const box = $('cfilter'); box.innerHTML = '';
   // 일정에 쓰인 색만 보여준다 (기본 색 순서대로, 그 밖의 색은 뒤에)
-  const used = [...new Set(live(events).map(e => e.color.toLowerCase()))];
+  const used = [...new Set(calEvents().map(e => e.color.toLowerCase()))];
   const order = EV_COLORS.map(c => c.toLowerCase());
   used.sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99));
   [...colorFilter].forEach(c => { if (!used.includes(c)) colorFilter.delete(c); });
@@ -345,7 +388,7 @@ function render() {
                       k===todayKey && 'today', a !== b && k >= a && k <= b && 'inrange', a === b && k === a && 'sel'].filter(Boolean).join(' ');
     cell.dataset.k = k;
     const num = document.createElement('div'); num.className = 'num'; num.textContent = d.getDate(); cell.append(num);
-    if (calMode === 'pomo') {
+    if (isPomo()) {
       // 뽀모도로 달력: 그날 끝낸 횟수와 집중한 시간만
       const p = pomoOn(k);
       if (p.length) {
@@ -376,6 +419,7 @@ function render() {
     if (list.length > 3) { const m = document.createElement('div'); m.className = 'more'; m.textContent = `+${list.length - 3}개 더`; cell.append(m); }
     box.append(cell);
   }
+  renderTabs();
   renderFilter();
   renderSide();
 }
@@ -399,7 +443,6 @@ function highlight(el, text) {
 }
 
 // 뽀모도로 기록: [{id, date, start, end, minutes, task, u, deleted}]
-let calMode = load('calMode', 'events');
 const pomoAll = () => live(load('pomoLog', []));
 const pomoOn = k => pomoAll().filter(r => r.date === k);
 const hm = m => m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ' ' + (m % 60) + '분' : ''}` : `${m}분`;
@@ -438,12 +481,9 @@ function renderPomoSide(a, b) {
 function renderSide() {
   const [a, b] = range();
   $('startDate').value = a; $('endDate').value = b;
-  document.body.classList.toggle('pomo', calMode === 'pomo');
-  $('pomoCard').hidden = calMode !== 'pomo';
-  $('pomoCalBtn').classList.toggle('on', calMode === 'pomo');
-  $('pomoCalBtn').innerHTML = calMode === 'pomo' ? '📅<span class="vt"> 일정 달력</span>' : '🍅<span class="vt"> 뽀모도로 달력</span>';
-  $('pomoCalBtn').title = calMode === 'pomo' ? '일정 달력으로 돌아가기' : '뽀모도로 기록만 보는 달력으로 바꾸기';
-  if (calMode === 'pomo') { renderPomoSide(a, b); return; }
+  document.body.classList.toggle('pomo', isPomo());
+  $('pomoCard').hidden = !isPomo();
+  if (isPomo()) { renderPomoSide(a, b); return; }
   const searching = !!query;
   let list;
   if (searching) {
@@ -485,6 +525,101 @@ function renderSide() {
     row.append(del); $('list').append(row);
   });
 }
+
+// ── 캘린더 탭: 누르면 바꾸기 · 더블클릭 이름 · 눈 = 숨기기 · ✕ = 삭제 · + = 추가 ──
+const EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.5"/><path d="M4 4l16 16"/></svg>';
+let hiddenOpen = false;
+function switchCal(id) {
+  if (activeCal === id) return;
+  activeCal = id; save('activeCal', id);
+  // 다른 캘린더로 가면 검색·색 보기는 풀어 준다
+  colorFilter.clear(); save('colorFilter', []);
+  render();
+}
+function renameCal(c, el) {
+  inlineEdit(el, c.name, { maxLength: 20, placeholder: '캘린더 이름',
+    onDone: v => { if (v !== null && v !== c.name) { c.name = v; touch(c); saveCals(); } render(); } });
+}
+function hideCal(c) {
+  if (visibleCals().length <= 1) { alert('캘린더가 하나는 보여야 해요.\n다른 캘린더를 먼저 보이게 하거나 새로 만든 뒤 숨겨 주세요.'); return; }
+  c.hidden = true; touch(c); saveCals(); fixActive(); render();
+}
+function deleteCal(c) {
+  if (c.id === 'pomo') return;
+  const others = liveCals().filter(x => x.id !== 'pomo' && x.id !== c.id);
+  if (!others.length) { alert('일정 캘린더는 하나 이상 있어야 해서 지울 수 없어요.\n안 보이게 하려면 숨기기(눈 모양)를 눌러 주세요.'); return; }
+  const n = live(events).filter(e => calOf(e) === c.id).length;
+  if (!confirm(`'${c.name || '이름 없는 캘린더'}' 캘린더를 삭제할까요?` + (n ? `\n안에 있는 일정 ${n}개도 함께 지워집니다.` : ''))) return;
+  events.forEach(e => { if (calOf(e) === c.id && !e.deleted) { e.deleted = true; touch(e); } }); saveEvents();
+  c.deleted = true; touch(c);
+  if (!visibleCals().length) { others[0].hidden = false; touch(others[0]); }
+  saveCals(); fixActive(); render();
+}
+function addCal() {
+  const n = liveCals().filter(c => c.id !== 'pomo').length + 1;
+  const c = touch({ id: uid(), name: `캘린더 ${n}` });
+  // 새 캘린더는 뽀모도로 달력 앞에 넣는다
+  const pi = calendars.findIndex(x => x.id === 'pomo');
+  calendars.splice(pi < 0 ? calendars.length : pi, 0, c); saveCals();
+  hiddenOpen = false; activeCal = c.id; save('activeCal', c.id); colorFilter.clear(); save('colorFilter', []);
+  render();
+  const nm = document.querySelector(`.ctab[data-id="${c.id}"] .nm`); if (nm) renameCal(c, nm);
+}
+function renderTabs() {
+  const bar = $('ctabs'); bar.innerHTML = '';
+  visibleCals().forEach(c => {
+    const pomo = c.id === 'pomo';
+    const tab = document.createElement('div'); tab.className = 'ctab' + (pomo ? ' pomo' : '') + (c.id === activeCal ? ' on' : ''); tab.dataset.id = c.id;
+    const nm = document.createElement('span'); nm.className = 'nm' + (c.name ? '' : ' blank');
+    nm.textContent = (pomo ? '🍅 ' : '') + (c.name || '이름 없음');
+    tab.title = '누르면 이 캘린더 보기 · 더블클릭해서 이름 바꾸기' + (pomo ? '\n(뽀모도로 달력은 지울 수 없고 숨기기만 돼요)' : '');
+    tab.onclick = e => { if (!e.target.closest('button, input')) switchCal(c.id); };
+    tab.ondblclick = e => { if (!e.target.closest('button, input')) renameCal(c, nm); };
+    const hide = document.createElement('button'); hide.type = 'button'; hide.className = 'x'; hide.innerHTML = EYE_OFF; hide.title = '이 캘린더 숨기기';
+    hide.onclick = () => hideCal(c);
+    tab.append(nm, hide);
+    if (!pomo) {
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'x del'; del.textContent = '✕'; del.title = '이 캘린더 삭제';
+      del.onclick = () => deleteCal(c); tab.append(del);
+    }
+    bar.append(tab);
+  });
+  const add = document.createElement('button'); add.type = 'button'; add.className = 'cadd'; add.textContent = '+'; add.title = '새 캘린더 만들기';
+  add.onclick = addCal; bar.append(add);
+  const hid = liveCals().filter(c => c.hidden);
+  if (hid.length) {
+    const hb = document.createElement('button'); hb.type = 'button'; hb.className = 'chid';
+    hb.textContent = `숨긴 캘린더 ${hid.length}개 ${hiddenOpen ? '▴' : '▾'}`; hb.title = '숨긴 캘린더 다시 보이게 하기';
+    hb.onclick = () => { hiddenOpen = !hiddenOpen; renderTabs(); };
+    bar.append(hb);
+    if (hiddenOpen) {
+      const m = document.createElement('div'); m.className = 'hmenu';
+      m.style.left = hb.offsetLeft + 'px';
+      m.innerHTML = '<div class="t">숨긴 캘린더</div>';
+      hid.forEach(c => {
+        const r = document.createElement('div'); r.className = 'r';
+        const t = document.createElement('span'); t.textContent = (c.id === 'pomo' ? '🍅 ' : '') + (c.name || '이름 없음');
+        const show = document.createElement('button'); show.type = 'button'; show.textContent = '보이기';
+        show.onclick = () => { c.hidden = false; touch(c); saveCals(); if (!liveCals().some(x => x.hidden)) hiddenOpen = false; activeCal = c.id; save('activeCal', c.id); render(); };
+        r.append(t, show);
+        if (c.id !== 'pomo') {
+          const del = document.createElement('button'); del.type = 'button'; del.textContent = '삭제';
+          del.onclick = () => deleteCal(c); r.append(del);
+        }
+        m.append(r);
+      });
+      bar.append(m);
+    }
+  } else hiddenOpen = false;
+}
+document.addEventListener('mousedown', e => {
+  if (hiddenOpen && !e.target.closest('.hmenu, .chid')) { hiddenOpen = false; renderTabs(); }
+});
+// 다른 창(캐릭터 등)과 같이 쓰는 값이 바뀌면 다시 그리기
+window.addEventListener('storage', e => {
+  if (e.key === 'calendars') { calendars = load('calendars', calendars); fixActive(); render(); }
+  if (e.key === 'events2') { events = load('events2', events); render(); }
+});
 
 // 목록에서 일정의 날짜·시간 고치기
 function editDates(ev, el) {
@@ -606,7 +741,7 @@ $('form').onsubmit = e => {
   const text = $('text').value.trim(); if (!text) { $('text').focus(); return; }
   let a = $('startDate').value || selStart, b = $('endDate').value || a;
   if (b < a) [a, b] = [b, a];
-  events.push(touch({ id: uid(), text, start: a, end: b, time: $('time').value, color: cfg.evColor }));
+  events.push(touch({ id: uid(), cal: activeCal, text, start: a, end: b, time: $('time').value, color: cfg.evColor }));
   saveEvents(); $('text').value = ''; $('time').value = ''; render();
 };
 $('opacity').oninput = $('opacity2').oninput = e => { cfg.opacity = +e.target.value; save('cfg', cfg); applyCfg(); };
@@ -652,9 +787,8 @@ function showButtons() {
 $('lockBtn').onclick = () => { locked = !locked; showButtons(); window.api.setLocked(locked); };
 $('pomoBtn').onclick = () => { pomoVisible = !pomoVisible; showButtons(); window.api.setPomodoro(pomoVisible); };
 $('pomoOpen').onclick = () => { pomoVisible = true; showButtons(); window.api.setPomodoro(true); };
-$('pomoCalBtn').onclick = () => { calMode = calMode === 'pomo' ? 'events' : 'pomo'; save('calMode', calMode); render(); };
 // 타이머 창에서 기록이 늘면 바로 다시 그리기
-window.addEventListener('storage', e => { if (e.key === 'pomoLog' && calMode === 'pomo') render(); });
+window.addEventListener('storage', e => { if (e.key === 'pomoLog' && isPomo()) render(); });
 $('ytBtn').onclick = () => { ytVisible = !ytVisible; showButtons(); window.api.setYoutube(ytVisible); };
 $('memoBtn').onclick = () => { memoVisible = !memoVisible; showButtons(); window.api.setMemoVisible(memoVisible); };
 $('pinBtn').onclick = () => { $('settings').classList.remove('open'); window.api.desktopMode(); };
@@ -675,7 +809,8 @@ let todayKeyCache = key(new Date());
 setInterval(() => {
   const now = new Date(), k = key(now);
   const hm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  live(events).forEach(ev => {
+  const shownCals = new Set(visibleCals().map(c => c.id));   // 숨긴 캘린더의 일정은 알리지 않는다
+  live(events).filter(ev => shownCals.has(calOf(ev))).forEach(ev => {
     const nk = 'notified:' + ev.id;
     if (ev.time === hm && ev.start <= k && k <= ev.end && localStorage.getItem(nk) !== k) {
       localStorage.setItem(nk, k); window.api.notify('일정 알림', ev.text);
