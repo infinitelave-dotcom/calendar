@@ -181,6 +181,7 @@
       <button data-m="focus">집중</button>
       <button data-m="short">짧은 휴식</button>
       <button data-m="long">긴 휴식</button>
+      <button data-m="free" title="시간을 정하지 않고 0부터 재기 (끝내기를 누르면 기록)">⏱ 자유</button>
     </div>
 
     <div class="prog"><span id="elapsed">00:00</span><div class="track"><div class="fill" id="fill"></div><div class="knob" id="knob"></div></div><span id="remain">-25:00</span></div>
@@ -236,10 +237,13 @@
 </div>
 <script src="common.js"></script>
 <script>
-const LABEL = { focus: '집중', short: '짧은 휴식', long: '긴 휴식' };
-const HEAD = { focus: 'Now Focusing', short: 'Short Break', long: 'Long Break' };
-const PLAYCOLOR = { focus: 'rgba(232,128,122,.88)', short: 'rgba(92,184,140,.88)', long: 'rgba(96,150,220,.88)' };
+const LABEL = { focus: '집중', short: '짧은 휴식', long: '긴 휴식', free: '자유' };
+const HEAD = { focus: 'Now Focusing', short: 'Short Break', long: 'Long Break', free: 'Free Focus' };
+const PLAYCOLOR = { focus: 'rgba(232,128,122,.88)', short: 'rgba(92,184,140,.88)', long: 'rgba(96,150,220,.88)', free: 'rgba(150,112,206,.88)' };
 const PLAY = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M8 4.5v15L20 12z"/></svg>';
+// 자유 모드의 '끝내기' 버튼 (네모)과 원래의 '다음으로' 버튼
+const STOP = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>';
+const SKIP = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"><path d="M6 5l10 7-10 7z"/><path d="M18 5v14" stroke-linecap="round"/></svg>';
 const PAUSE = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="6.5" y="5" width="3.5" height="14" rx="1"/><rect x="14" y="5" width="3.5" height="14" rx="1"/></svg>';
 const key = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
@@ -373,39 +377,51 @@ let endAt = 0;                        // 진행 중이면 끝나는 시각 (ms)
 let startedAt = null;                 // 이번 집중을 시작한 시각
 let cycle = load('pomoCycle', 0);     // 긴 휴식 전까지 끝낸 집중 수
 let timer = null;
+// 자유 모드(시간 정하지 않음): 0부터 올라간다. freeAcc = 멈추기 전까지 쌓인 초, runFrom = 이번에 ▶ 누른 시각
+let freeAcc = 0, runFrom = 0;
+const isFree = () => mode === 'free';
+const freeElapsed = () => freeAcc + (running() ? (Date.now() - runFrom) / 1000 : 0);
 
 const mmss = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const running = () => !!timer;
 
 function setMode(m, keepRunning) {
-  mode = m; total = cfg[m] * 60; left = total; endAt = 0; startedAt = null;
+  mode = m; total = m === 'free' ? 0 : cfg[m] * 60; left = total; endAt = 0; startedAt = null; freeAcc = 0; runFrom = 0;
   if (!keepRunning) stop();
   document.documentElement.style.setProperty('--play', PLAYCOLOR[m]);
   draw();
 }
 function draw() {
-  const remain = Math.max(0, Math.ceil(left)), done = total - remain, pct = total ? done / total * 100 : 0;
+  const free = isFree();
+  const remain = free ? 0 : Math.max(0, Math.ceil(left));
+  const done = free ? Math.floor(freeElapsed()) : total - remain;
+  // 자유 모드: 막대는 1시간마다 한 바퀴
+  const pct = free ? (done % 3600) / 3600 * 100 : total ? done / total * 100 : 0;
   $('elapsed').textContent = mmss(done);
-  $('remain').textContent = '-' + mmss(remain);
-  $('remainText').textContent = `${Math.floor(remain / 60)}분 ${String(remain % 60).padStart(2, '0')}초 남았어요` + (running() ? '' : (remain < total ? ' · 멈춤' : ''));
+  $('remain').textContent = free ? '∞' : '-' + mmss(remain);
+  $('remainText').textContent = free
+    ? (done ? `${Math.floor(done / 60)}분 ${String(done % 60).padStart(2, '0')}초 지났어요` + (running() ? '' : ' · 멈춤') : '▶ 를 누르면 0부터 재기 시작해요')
+    : `${Math.floor(remain / 60)}분 ${String(remain % 60).padStart(2, '0')}초 남았어요` + (running() ? '' : (remain < total ? ' · 멈춤' : ''));
   $('fill').style.width = pct + '%'; $('knob').style.left = pct + '%';
+  $('skip').innerHTML = free ? STOP : SKIP;
+  $('skip').title = free ? '끝내기 (지금까지 시간을 뽀모도로 달력에 기록)' : '다음으로 넘기기';
   $('head').textContent = HEAD[mode];
   const task = $('task').value.trim();
   $('title').textContent = task || LABEL[mode];
-  $('sub').textContent = task ? LABEL[mode] : (mode === 'focus' ? `Pomodoro ${cycle + 1} / ${cfg.every}` : 'Break time');
+  $('sub').textContent = task ? LABEL[mode] : (mode === 'focus' ? `Pomodoro ${cycle + 1} / ${cfg.every}` : free ? 'Stopwatch' : 'Break time');
   document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
   $('start').innerHTML = running() ? PAUSE : PLAY; $('start').title = running() ? '일시정지' : '시작';
   document.body.classList.toggle('running', running());
   syncVideo();
   updateTray(done, remain);
-  document.title = running() ? `${mmss(remain)} ${LABEL[mode]}` : '뽀모도로';
+  document.title = running() ? `${mmss(free ? done : remain)} ${LABEL[mode]}` : '뽀모도로';
   const today = live(load('pomoLog', [])).filter(r => r.date === key(new Date()));
   $('today').textContent = `오늘 🍅 ${today.length}회 · ${today.reduce((a, r) => a + r.minutes, 0)}분`;
   $('dots').innerHTML = Array.from({ length: cfg.every }, (_, i) => `<i class="${i < cycle ? 'done' : ''}"></i>`).join('');
 }
 // ── 작업 표시줄(시계 옆) 아이콘: 지난 시간을 숫자로 ──
 // 1시간 전까지는 지난 '분', 그 뒤로는 '1h' 처럼. 마우스를 올리면 정확한 시간이 나온다.
-const TRAYCOLOR = { focus: '#E8574F', short: '#3FA372', long: '#3F7FCC' };
+const TRAYCOLOR = { focus: '#E8574F', short: '#3FA372', long: '#3F7FCC', free: '#8E6CC8' };
 let trayKey = null, trayTip = null;
 function trayIcon(size, text, color) {
   const c = document.createElement('canvas'); c.width = c.height = size;
@@ -420,29 +436,55 @@ function trayIcon(size, text, color) {
 }
 function updateTray(done, remain) {
   if (!window.api.pomoTray) return;
-  const started = running() || remain < total;
+  const started = running() || (isFree() ? done > 0 : remain < total);
   if (!started) { if (trayKey !== null) { trayKey = trayTip = null; window.api.pomoTray(null); } return; }
   const min = Math.floor(done / 60);
   const text = min < 60 ? String(min) : Math.floor(min / 60) + 'h';
   const color = running() ? TRAYCOLOR[mode] : '#8A8A8A';      // 멈춤 = 회색
   const k = text + color;
-  const tip = `🍅 ${LABEL[mode]} ${running() ? '' : '(멈춤) '}· ${Math.floor(done / 60)}분 ${String(done % 60).padStart(2, '0')}초 지남 · ${Math.floor(remain / 60)}분 ${String(remain % 60).padStart(2, '0')}초 남음`;
+  const tip = `🍅 ${LABEL[mode]} ${running() ? '' : '(멈춤) '}· ${Math.floor(done / 60)}분 ${String(done % 60).padStart(2, '0')}초 지남`
+    + (isFree() ? '' : ` · ${Math.floor(remain / 60)}분 ${String(remain % 60).padStart(2, '0')}초 남음`);
   if (k !== trayKey) { trayKey = k; trayTip = tip; window.api.pomoTray({ img16: trayIcon(16, text, color), img32: trayIcon(32, text, color), tip }); }
   else if (tip !== trayTip) { trayTip = tip; window.api.pomoTray({ tip }); }
 }
 function start() {
   ensureAudio();
   if (running()) return;
-  if (mode === 'focus' && !startedAt) startedAt = new Date().toISOString();
-  endAt = Date.now() + left * 1000;
+  if ((mode === 'focus' || isFree()) && !startedAt) startedAt = new Date().toISOString();
+  endAt = Date.now() + left * 1000; runFrom = Date.now();
   timer = setInterval(tick, 250);
   draw();
 }
 function stop() { clearInterval(timer); timer = null; }
-function pause() { if (!running()) return; left = Math.max(0, (endAt - Date.now()) / 1000); stop(); draw(); }
+function pause() {
+  if (!running()) return;
+  if (isFree()) freeAcc = freeElapsed(); else left = Math.max(0, (endAt - Date.now()) / 1000);
+  stop(); draw();
+}
 function tick() {
+  if (isFree()) { draw(); return; }
   left = Math.max(0, (endAt - Date.now()) / 1000);
   if (left <= 0) finish(true); else draw();
+}
+
+// 자유 모드 끝내기: 지금까지 잰 시간을 기록하고 다시 0으로
+function finishFree() {
+  const sec = Math.floor(freeElapsed());
+  if (!sec) return;
+  stop();
+  const mins = Math.round(sec / 60);
+  if (mins < 1) {
+    alert('1분이 안 돼서 기록하지 않았어요.');
+  } else {
+    const log = load('pomoLog', []);
+    const now = new Date();
+    log.push(touch({ id: uid(), date: key(now), start: startedAt || new Date(now - sec * 1000).toISOString(), end: now.toISOString(),
+                     minutes: mins, task: $('task').value.trim(), free: true }));
+    save('pomoLog', log);
+    window.api.notify('⏱ 자유 집중 끝', `${Math.floor(sec / 60)}분 ${sec % 60}초 집중했어요. 뽀모도로 달력에 기록했어요.`);
+    if (cfg.sound) playSound();
+  }
+  setMode('free');
 }
 
 // 한 번이 끝났을 때 (done=false 이면 건너뛰기)
@@ -521,12 +563,15 @@ function playSound(name = cfg.soundName, vol = cfg.volume) {
 document.addEventListener('pointerdown', () => ensureAudio(), { once: true });
 
 $('start').onclick = () => running() ? pause() : start();
-$('reset').onclick = () => setMode(mode);
-$('skip').onclick = () => finish(false);
+$('reset').onclick = () => {
+  if (isFree() && freeElapsed() >= 1 && !confirm('기록하지 않고 0으로 되돌릴까요?')) return;
+  setMode(mode);
+};
+$('skip').onclick = () => isFree() ? finishFree() : finish(false);
 $('task').oninput = draw;
 document.querySelectorAll('#modes button').forEach(b => b.onclick = () => {
   if (b.dataset.m === mode) return;
-  if (running() && !confirm('타이머가 돌아가는 중이에요. 바꿀까요?')) return;
+  if ((running() || (isFree() && freeElapsed() >= 1)) && !confirm(isFree() ? '자유 모드에서 잰 시간은 기록되지 않아요. 바꿀까요? (기록하려면 ■ 끝내기)' : '타이머가 돌아가는 중이에요. 바꿀까요?')) return;
   setMode(b.dataset.m);
 });
 
@@ -600,7 +645,7 @@ $('sDone').onclick = () => {
   cfg.auto = $('sAuto').checked; cfg.sound = $('sSound').checked; cfg.volume = +$('sVol').value;
   save('pomoCfg', cfg);
   $('setup').classList.remove('open'); $('setBtn').classList.remove('on');
-  if (!running() && left === total) setMode(mode); else draw();
+  if (!isFree() && !running() && left === total) setMode(mode); else draw();
 };
 
 $('top').onclick = () => window.api.pomoAction('top');

@@ -458,7 +458,7 @@ function renderPomoSide(a, b) {
     const row = document.createElement('div'); row.className = 'ev'; row.style.borderLeftColor = '#E8574F';
     const info = document.createElement('div'); info.className = 'info';
     const m = document.createElement('div'); m.className = 'meta';
-    m.textContent = `🍅 ${a !== b ? fmt(r.date) + ' · ' : ''}${clock(r.start)} ~ ${clock(r.end)} · ${r.minutes}분`;
+    m.textContent = `${r.free ? '⏱ 자유' : '🍅'} ${a !== b ? fmt(r.date) + ' · ' : ''}${clock(r.start)} ~ ${clock(r.end)} · ${r.minutes}분`;
     const t = document.createElement('div'); t.className = 'txt'; t.textContent = r.task || '(집중한 일 이름 없음)';
     if (!r.task) t.style.opacity = .6;
     info.append(m, t); row.append(info);
