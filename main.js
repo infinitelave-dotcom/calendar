@@ -371,6 +371,16 @@ ipcMain.on('reset', () => {
 ipcMain.on('pomo-visible', (_e, on) => setPomodoro(on));
 ipcMain.on('pomo-action', (_e, name) => pomo.action(name));
 ipcMain.on('pomo-tray', (_e, d) => pomo.tray(d));
+// 뽀모도로 표지에 넣을 동영상 파일 고르기 (파일은 복사하지 않고 그 자리에서 재생)
+ipcMain.handle('pomo-pick-video', async () => {
+  const r = await dialog.showOpenDialog(pomo.win || undefined, {
+    title: '표지에 넣을 동영상 고르기', properties: ['openFile'],
+    filters: [{ name: '동영상', extensions: ['mp4', 'm4v', 'webm', 'mov', 'mkv', 'ogv'] }, { name: '모든 파일', extensions: ['*'] }],
+  });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const p = r.filePaths[0];
+  return { url: require('url').pathToFileURL(p).href, name: path.basename(p) };
+});
 ipcMain.on('yt-visible', (_e, on) => setYoutube(on));
 ipcMain.on('yt-action', (_e, name, arg) => yt.action(name, arg));
 ipcMain.on('pet-set', (_e, o) => setPet(o || {}));
