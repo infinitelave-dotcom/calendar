@@ -43,6 +43,22 @@
   body.hasArt .disc svg { display:none; }
   body.hasArt #art { display:block; }
   body.hasArt .disc { width:168px; height:168px; }
+  /* 유튜브 주소를 넣으면 표지 자리에서 그 영상이 재생된다 (16:9 둥근 사각형) */
+  #vid { display:none; position:absolute; inset:0; border-radius:16px; overflow:hidden; background:#000; box-shadow:0 8px 22px rgba(0,0,0,.35); }
+  #vid iframe { width:100%; height:100%; border:0; display:block; }
+  body.hasVid .disc { width:298px; height:168px; }
+  body.hasVid .disc svg, body.hasVid #art { display:none; }
+  body.hasVid #vid { display:block; }
+  #vidErr { display:none; position:absolute; inset:0; background:rgba(0,0,0,.82); flex-direction:column; align-items:center; justify-content:center;
+            gap:10px; padding:14px; text-align:center; font-size:13px; line-height:1.45; }
+  #vidErr.on { display:flex; }
+  #vidErr button { height:32px; padding:0 14px; border-radius:10px; background:#FF0033; font-size:13px; font-weight:700; }
+  .yrow { display:flex; gap:6px; }
+  .yrow input { flex:1; min-width:0; height:34px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.16); border-radius:10px; color:#fff;
+                font-family:inherit; font-size:12px; padding:0 10px; outline:none; }
+  .yrow input:focus { border-color:rgba(255,255,255,.5); }
+  .yrow input::placeholder { color:rgba(255,255,255,.5); }
+  .yrow .sbtn { flex:none; height:34px; }
 
   .title { margin-top:16px; font-size:24px; font-weight:400; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sub { font-size:14px; opacity:.6; margin-top:2px; }
@@ -156,6 +172,7 @@
         <g class="arm"><path d="M84 50v24"/><rect x="80.5" y="54" width="7" height="12" rx="3" fill="none"/><path d="M84 74v8"/></g>
       </svg>
       <img id="art" alt="">
+      <div id="vid"><div id="vidErr"><div id="vidErrMsg"></div><button type="button" id="vidOpen">유튜브 창에서 열기</button></div></div>
     </div>
 
     <div class="title" id="title">집중</div>
@@ -195,8 +212,10 @@
     <div class="row2">직접 고르기 <input type="color" id="c1"> <input type="color" id="c2"></div>
     <h4>표지</h4>
     <div class="row2"><button class="sbtn" id="pickImg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>사진 추가</button><button class="sbtn" id="clearImg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>레코드판</button><input type="file" id="file" accept="image/*" hidden></div>
+    <div class="yrow"><input id="ytUrl" placeholder="유튜브 주소 붙여넣기" spellcheck="false"><button class="sbtn" id="ytSet" type="button">영상 넣기</button></div>
+    <label>타이머와 함께 재생·멈춤 <input type="checkbox" class="sw" id="ytSync"></label>
     <label>배경 흐리게 <input type="range" id="blur" min="0" max="30"></label>
-    <div class="note">사진을 넣으면 가운데 레코드판이 그 사진(둥근 사각형)으로 바뀌고, 배경에도 흐리게 깔려요. 5MB 이하 사진만 쓸 수 있어요.</div>
+    <div class="note">사진을 넣으면 가운데 레코드판이 그 사진(둥근 사각형)으로 바뀌고, 배경에도 흐리게 깔려요. 5MB 이하 사진만 쓸 수 있어요.<br>유튜브 주소를 넣으면 표지 자리에서 그 영상이 나와요. 레코드판을 누르면 원래대로 돌아가요.</div>
     <h4>초기화</h4>
     <div class="reset-box">
       <div class="seg" id="rPeriod">
@@ -234,37 +253,113 @@ const PRESETS = {
   night:    ['#2B2E4A', '#5B4C77', '#1B1D2E'],
 };
 const gradient = c => `linear-gradient(160deg, ${c[0]} 0%, ${c[1]} 50%, ${c[2] || c[1]} 100%)`;
-let bg = Object.assign({ preset: 'sunday', c1: '#D4575F', c2: '#5D5FA0', image: null, blur: 18 }, load('pomoBg', {}));
+let bg = Object.assign({ preset: 'sunday', c1: '#D4575F', c2: '#5D5FA0', image: null, blur: 18, yt: null, ytSync: true }, load('pomoBg', {}));
+
+// ── 표지 유튜브 영상 ──
+// 주소에서 영상 번호(v)·재생목록(list)을 꺼낸다. youtu.be/…, watch?v=…, shorts/…, embed/…, live/…, 번호만 넣어도 된다
+function parseYouTube(text) {
+  const t = String(text || '').trim();
+  if (/^[\w-]{11}$/.test(t)) return { v: t };
+  let u; try { u = new URL(/^https?:\/\//i.test(t) ? t : 'https://' + t); } catch { return null; }
+  const host = u.hostname.replace(/^(www|m|music)\./, '');
+  let v = null;
+  if (host === 'youtu.be') v = u.pathname.slice(1).split('/')[0];
+  else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+    v = u.searchParams.get('v');
+    const m = u.pathname.match(/^\/(?:shorts|embed|live|v)\/([\w-]{11})/); if (!v && m) v = m[1];
+  } else return null;
+  const list = u.searchParams.get('list');
+  if (v && !/^[\w-]{11}$/.test(v)) v = null;
+  if (list && !/^[\w-]+$/.test(list)) return v ? { v } : null;
+  return v || list ? { v: v || null, list: list || null } : null;
+}
+const ytLink = y => y.v ? `https://www.youtube.com/watch?v=${y.v}${y.list ? '&list=' + y.list : ''}` : `https://www.youtube.com/playlist?list=${y.list}`;
+function ytEmbed(y) {
+  const q = new URLSearchParams({ enablejsapi: '1', playsinline: '1', rel: '0', modestbranding: '1', loop: '1' });
+  if (y.list) q.set('list', y.list); else q.set('playlist', y.v);   // 한 곡이면 계속 반복
+  return `https://www.youtube.com/embed/${y.v || 'videoseries'}?${q}`;
+}
+let ytFrame = null, ytShown = null, ytPlaying = null;
+function ytCmd(func, args = []) {
+  if (ytFrame && ytFrame.contentWindow) ytFrame.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
+}
+function showVideo() {
+  const box = $('vid');
+  const want = bg.yt ? ytEmbed(bg.yt) : null;
+  if (want === ytShown) return;
+  ytShown = want; ytPlaying = null; $('vidErr').classList.remove('on');
+  if (ytFrame) { ytFrame.remove(); ytFrame = null; }
+  if (!want) return;
+  ytFrame = document.createElement('iframe');
+  ytFrame.allow = 'autoplay; encrypted-media; picture-in-picture';
+  ytFrame.referrerPolicy = 'strict-origin-when-cross-origin';
+  ytFrame.src = want;
+  // 영상이 오류(퍼가기 금지 등)를 알려 주도록 듣기 시작
+  ytFrame.onload = () => { ytFrame && ytFrame.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*'); ytPlaying = null; syncVideo(); };
+  box.prepend(ytFrame);
+}
+// 타이머가 돌면 영상도 재생, 멈추면 영상도 멈춤
+function syncVideo() {
+  if (!ytFrame || !bg.ytSync) return;
+  const want = running();
+  if (want === ytPlaying) return;
+  ytPlaying = want; ytCmd(want ? 'playVideo' : 'pauseVideo');
+}
+window.addEventListener('message', e => {
+  if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(e.origin)) return;
+  let d; try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch { return; }
+  if (d && d.event === 'onError') {
+    const c = +d.info;
+    $('vidErrMsg').textContent = (c === 101 || c === 150 || c === 153) ? '이 영상은 다른 곳에서 재생하는 것을 영상 주인이 막아 두었어요.'
+      : c === 100 ? '영상을 찾을 수 없어요. (삭제되었거나 비공개)' : '영상을 재생할 수 없어요.';
+    $('vidErr').classList.add('on');
+  }
+});
 function applyBg() {
   const colors = bg.preset === 'custom' ? [bg.c1, bg.c2] : PRESETS[bg.preset] || PRESETS.sunday;
   $('bg').style.background = gradient(colors);
   const img = $('bgImg');
   if (bg.image) { img.style.display = 'block'; img.style.backgroundImage = `url("${bg.image}")`; img.style.filter = `blur(${bg.blur}px)`; }
   else img.style.display = 'none';
-  // 가운데: 사진이 있으면 둥근 사각형 표지, 없으면 레코드판
+  // 유튜브 영상만 있으면 그 영상의 썸네일을 배경에 흐리게
+  const backImg = bg.image || (bg.yt && bg.yt.v ? `https://i.ytimg.com/vi/${bg.yt.v}/hqdefault.jpg` : null);
+  if (backImg) { img.style.display = 'block'; img.style.backgroundImage = `url("${backImg}")`; img.style.filter = `blur(${bg.blur}px)`; }
+  // 가운데: 유튜브 영상 > 사진(둥근 사각형 표지) > 레코드판
+  document.body.classList.toggle('hasVid', !!bg.yt);
+  showVideo();
+  $('ytSync').checked = bg.ytSync;
+  if (document.activeElement !== $('ytUrl')) $('ytUrl').value = bg.yt ? ytLink(bg.yt) : '';
   document.body.classList.toggle('hasArt', !!bg.image);
   if (bg.image) $('art').src = bg.image; else $('art').removeAttribute('src');
-  $('glow').style.display = bg.image ? 'none' : 'block';
-  $('shade').style.background = bg.image ? 'rgba(0,0,0,.28)' : 'rgba(0,0,0,.12)';
+  $('glow').style.display = backImg ? 'none' : 'block';
+  $('shade').style.background = backImg ? 'rgba(0,0,0,.28)' : 'rgba(0,0,0,.12)';
   // 설정 화면 표시 맞추기
-  document.querySelectorAll('#presets div').forEach(d => d.classList.toggle('on', !bg.image && d.dataset.p === bg.preset));
+  document.querySelectorAll('#presets div').forEach(d => d.classList.toggle('on', !backImg && d.dataset.p === bg.preset));
   $('c1').value = bg.c1; $('c2').value = bg.c2; $('blur').value = bg.blur;
 }
 const saveBg = () => { try { save('pomoBg', bg); } catch { alert('사진이 너무 커서 저장하지 못했어요. 더 작은 사진을 골라 주세요.'); bg.image = null; save('pomoBg', bg); } applyBg(); };
 Object.entries(PRESETS).forEach(([name, c]) => {
   const d = document.createElement('div'); d.dataset.p = name; d.style.background = gradient(c); d.title = name;
-  d.onclick = () => { bg.preset = name; bg.image = null; saveBg(); };
+  d.onclick = () => { bg.preset = name; bg.image = null; bg.yt = null; saveBg(); };
   $('presets').append(d);
 });
-$('c1').oninput = $('c2').oninput = () => { bg.preset = 'custom'; bg.c1 = $('c1').value; bg.c2 = $('c2').value; bg.image = null; saveBg(); };
+$('c1').oninput = $('c2').oninput = () => { bg.preset = 'custom'; bg.c1 = $('c1').value; bg.c2 = $('c2').value; bg.image = null; bg.yt = null; saveBg(); };
 $('pickImg').onclick = () => $('file').click();
 $('file').onchange = e => {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
   if (f.size > 5 * 1024 * 1024) { alert('5MB 이하 사진만 쓸 수 있어요.'); return; }
-  const r = new FileReader(); r.onload = () => { bg.image = r.result; saveBg(); }; r.readAsDataURL(f);
+  const r = new FileReader(); r.onload = () => { bg.image = r.result; bg.yt = null; saveBg(); }; r.readAsDataURL(f);
 };
-$('clearImg').onclick = () => { bg.image = null; saveBg(); };
+$('clearImg').onclick = () => { bg.image = null; bg.yt = null; saveBg(); };
+$('ytSet').onclick = () => {
+  const y = parseYouTube($('ytUrl').value);
+  if (!y) { alert('유튜브 주소를 확인해 주세요.\n예) https://www.youtube.com/watch?v=… 또는 https://youtu.be/…'); $('ytUrl').focus(); return; }
+  bg.yt = y; bg.image = null; $('ytUrl').blur(); saveBg();
+};
+$('ytUrl').onkeydown = e => { if (e.key === 'Enter') $('ytSet').click(); };
+$('ytSync').onchange = e => { bg.ytSync = e.target.checked; ytPlaying = null; saveBg(); syncVideo(); };
+$('vidOpen').onclick = () => { if (!bg.yt) return; window.api.setYoutube(true); window.api.ytAction('search', ytLink(bg.yt)); };
 $('blur').oninput = e => { bg.blur = +e.target.value; saveBg(); };
 
 // ── 타이머 ──
@@ -299,6 +394,7 @@ function draw() {
   document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
   $('start').innerHTML = running() ? PAUSE : PLAY; $('start').title = running() ? '일시정지' : '시작';
   document.body.classList.toggle('running', running());
+  syncVideo();
   document.title = running() ? `${mmss(remain)} ${LABEL[mode]}` : '뽀모도로';
   const today = live(load('pomoLog', [])).filter(r => r.date === key(new Date()));
   $('today').textContent = `오늘 🍅 ${today.length}회 · ${today.reduce((a, r) => a + r.minutes, 0)}분`;
