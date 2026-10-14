@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   // 뽀모도로 창
   setPomodoro: (on) => ipcRenderer.send('pomo-visible', on),
   pomoAction: (name) => ipcRenderer.send('pomo-action', name),
+  pomoTray: (d) => ipcRenderer.send('pomo-tray', d),
   onPomo: (cb) => ipcRenderer.on('pomo-state', (_e, s) => cb(s)),
   // 유튜브 창
   setYoutube: (on) => ipcRenderer.send('yt-visible', on),

@@ -370,6 +370,7 @@ ipcMain.on('reset', () => {
 });
 ipcMain.on('pomo-visible', (_e, on) => setPomodoro(on));
 ipcMain.on('pomo-action', (_e, name) => pomo.action(name));
+ipcMain.on('pomo-tray', (_e, d) => pomo.tray(d));
 ipcMain.on('yt-visible', (_e, on) => setYoutube(on));
 ipcMain.on('yt-action', (_e, name, arg) => yt.action(name, arg));
 ipcMain.on('pet-set', (_e, o) => setPet(o || {}));

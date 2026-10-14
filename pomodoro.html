@@ -397,10 +397,38 @@ function draw() {
   $('start').innerHTML = running() ? PAUSE : PLAY; $('start').title = running() ? '일시정지' : '시작';
   document.body.classList.toggle('running', running());
   syncVideo();
+  updateTray(done, remain);
   document.title = running() ? `${mmss(remain)} ${LABEL[mode]}` : '뽀모도로';
   const today = live(load('pomoLog', [])).filter(r => r.date === key(new Date()));
   $('today').textContent = `오늘 🍅 ${today.length}회 · ${today.reduce((a, r) => a + r.minutes, 0)}분`;
   $('dots').innerHTML = Array.from({ length: cfg.every }, (_, i) => `<i class="${i < cycle ? 'done' : ''}"></i>`).join('');
+}
+// ── 작업 표시줄(시계 옆) 아이콘: 지난 시간을 숫자로 ──
+// 1시간 전까지는 지난 '분', 그 뒤로는 '1h' 처럼. 마우스를 올리면 정확한 시간이 나온다.
+const TRAYCOLOR = { focus: '#E8574F', short: '#3FA372', long: '#3F7FCC' };
+let trayKey = null, trayTip = null;
+function trayIcon(size, text, color) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d'), r = size * .22;
+  g.fillStyle = color;
+  g.beginPath(); g.roundRect(0, 0, size, size, r); g.fill();
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const fs = text.length >= 3 ? size * .5 : size * .72;
+  g.font = `bold ${fs}px "Segoe UI", Arial, sans-serif`;
+  g.fillText(text, size / 2, size / 2 + size * .04);
+  return c.toDataURL('image/png');
+}
+function updateTray(done, remain) {
+  if (!window.api.pomoTray) return;
+  const started = running() || remain < total;
+  if (!started) { if (trayKey !== null) { trayKey = trayTip = null; window.api.pomoTray(null); } return; }
+  const min = Math.floor(done / 60);
+  const text = min < 60 ? String(min) : Math.floor(min / 60) + 'h';
+  const color = running() ? TRAYCOLOR[mode] : '#8A8A8A';      // 멈춤 = 회색
+  const k = text + color;
+  const tip = `🍅 ${LABEL[mode]} ${running() ? '' : '(멈춤) '}· ${Math.floor(done / 60)}분 ${String(done % 60).padStart(2, '0')}초 지남 · ${Math.floor(remain / 60)}분 ${String(remain % 60).padStart(2, '0')}초 남음`;
+  if (k !== trayKey) { trayKey = k; trayTip = tip; window.api.pomoTray({ img16: trayIcon(16, text, color), img32: trayIcon(32, text, color), tip }); }
+  else if (tip !== trayTip) { trayTip = tip; window.api.pomoTray({ tip }); }
 }
 function start() {
   ensureAudio();

@@ -1,7 +1,7 @@
 // ── 뽀모도로 창 ──────────────────────────────────────────────
 // 유튜브 창처럼 따로 뜨는 작은 창. 작업 표시줄에는 버튼을 만들지 않는다.
 // 끝낸 집중 기록은 창 안(pomodoro.html)에서 localStorage 'pomoLog' 에 저장 → 달력의 "뽀모도로 달력"에 표시된다.
-const { BrowserWindow, screen } = require('electron');
+const { BrowserWindow, screen, Tray, nativeImage } = require('electron');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -50,16 +50,35 @@ function createPomodoro({ getState, saveState, preload, onVisibilityChange }) {
     coverPort().then(port => { if (!w.isDestroyed()) w.loadFile(path.join(__dirname, 'pomodoro.html'), { query: { ytPort: String(port) } }); });
     win.webContents.on('did-finish-load', () => win && win.webContents.send('pomo-state', { onTop: !!s.onTop }));
     win.on('moved', () => remember({ bounds: win.getBounds() }));
-    win.on('closed', () => { win = null; remember({ visible: false }); onVisibilityChange && onVisibilityChange(); });
+    win.on('closed', () => { win = null; setTray(null); remember({ visible: false }); onVisibilityChange && onVisibilityChange(); });
     remember({ visible: true }); onVisibilityChange && onVisibilityChange();
   }
   function close() { if (win) win.close(); }
+
+  // 작업 표시줄 오른쪽(시계 옆)에 지난 시간을 숫자로 보여 주는 아이콘. 타이머를 시작하면 생기고, 처음 상태로 돌아가면 사라진다.
+  // d = { img16, img32, tip } (그림은 창에서 그려서 보낸다) / null = 없애기
+  let tray = null;
+  function setTray(d) {
+    if (!d) { if (tray) { tray.destroy(); tray = null; } return; }
+    let image = null;
+    if (d.img16) {
+      image = nativeImage.createEmpty();
+      image.addRepresentation({ scaleFactor: 1, dataURL: d.img16 });
+      if (d.img32) image.addRepresentation({ scaleFactor: 2, dataURL: d.img32 });
+    }
+    if (!tray) {
+      if (!image) return;
+      tray = new Tray(image);
+      tray.on('click', () => show());          // 누르면 뽀모도로 창
+    } else if (image) tray.setImage(image);
+    if (d.tip) tray.setToolTip(d.tip);
+  }
   function action(name) {
     if (!win) return;
     if (name === 'close') close();
     if (name === 'top') { const on = !win.isAlwaysOnTop(); win.setAlwaysOnTop(on); remember({ onTop: on }); win.webContents.send('pomo-state', { onTop: on }); }
   }
-  return { show, close, action, visible: () => !!win, get win() { return win; } };
+  return { show, close, action, tray: setTray, visible: () => !!win, get win() { return win; } };
 }
 
 module.exports = { createPomodoro };
