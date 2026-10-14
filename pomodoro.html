@@ -274,46 +274,48 @@ function parseYouTube(text) {
   return v || list ? { v: v || null, list: list || null } : null;
 }
 const ytLink = y => y.v ? `https://www.youtube.com/watch?v=${y.v}${y.list ? '&list=' + y.list : ''}` : `https://www.youtube.com/playlist?list=${y.list}`;
+// 표지 영상은 앱이 이 컴퓨터 안에서 여는 작은 주소(127.0.0.1)의 yt-cover.html 안에서 재생된다 (pomodoro.js 참고)
+const YT_PORT = +new URLSearchParams(location.search).get('ytPort') || 0;
 function ytEmbed(y) {
-  const q = new URLSearchParams({ enablejsapi: '1', playsinline: '1', rel: '0', modestbranding: '1', loop: '1' });
-  if (y.list) q.set('list', y.list); else q.set('playlist', y.v);   // 한 곡이면 계속 반복
-  return `https://www.youtube.com/embed/${y.v || 'videoseries'}?${q}`;
+  const q = new URLSearchParams();
+  if (y.v) q.set('v', y.v); if (y.list) q.set('list', y.list);
+  return `http://127.0.0.1:${YT_PORT}/yt-cover.html?${q}`;
 }
 let ytFrame = null, ytShown = null, ytPlaying = null;
-function ytCmd(func, args = []) {
-  if (ytFrame && ytFrame.contentWindow) ytFrame.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
-}
+const ytCmd = cmd => { if (ytFrame && ytFrame.contentWindow) ytFrame.contentWindow.postMessage({ cmd }, '*'); };
 function showVideo() {
   const box = $('vid');
-  const want = bg.yt ? ytEmbed(bg.yt) : null;
+  const want = !bg.yt ? null : YT_PORT ? ytEmbed(bg.yt) : 'noport';
   if (want === ytShown) return;
   ytShown = want; ytPlaying = null; $('vidErr').classList.remove('on');
   if (ytFrame) { ytFrame.remove(); ytFrame = null; }
+  if (want === 'noport') { showVidErr('표지 영상을 준비하지 못했어요. 뽀모도로 창을 닫았다가 다시 열어 주세요.'); return; }
   if (!want) return;
   ytFrame = document.createElement('iframe');
-  ytFrame.allow = 'autoplay; encrypted-media; picture-in-picture';
-  ytFrame.referrerPolicy = 'strict-origin-when-cross-origin';
+  ytFrame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
   ytFrame.src = want;
-  // 영상이 오류(퍼가기 금지 등)를 알려 주도록 듣기 시작
-  ytFrame.onload = () => { ytFrame && ytFrame.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*'); ytPlaying = null; syncVideo(); };
   box.prepend(ytFrame);
 }
+function showVidErr(msg) { $('vidErrMsg').textContent = msg; $('vidErr').classList.add('on'); }
 // 타이머가 돌면 영상도 재생, 멈추면 영상도 멈춤
 function syncVideo() {
   if (!ytFrame || !bg.ytSync) return;
   const want = running();
   if (want === ytPlaying) return;
-  ytPlaying = want; ytCmd(want ? 'playVideo' : 'pauseVideo');
+  ytPlaying = want; ytCmd(want ? 'play' : 'pause');
 }
+const YT_ERR = {
+  2: '유튜브 주소가 올바르지 않아요.',
+  5: '이 영상은 여기서 재생할 수 없는 형식이에요.',
+  100: '영상을 찾을 수 없어요. (삭제되었거나 비공개 영상)',
+  101: '영상 주인이 다른 곳에서 재생하는 것을 막아 둔 영상이에요.',
+  150: '영상 주인이 다른 곳에서 재생하는 것을 막아 둔 영상이에요.',
+};
 window.addEventListener('message', e => {
-  if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(e.origin)) return;
-  let d; try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch { return; }
-  if (d && d.event === 'onError') {
-    const c = +d.info;
-    $('vidErrMsg').textContent = (c === 101 || c === 150 || c === 153) ? '이 영상은 다른 곳에서 재생하는 것을 영상 주인이 막아 두었어요.'
-      : c === 100 ? '영상을 찾을 수 없어요. (삭제되었거나 비공개)' : '영상을 재생할 수 없어요.';
-    $('vidErr').classList.add('on');
-  }
+  if (!ytFrame || e.source !== ytFrame.contentWindow) return;
+  const d = e.data || {};
+  if (d.type === 'ready') { ytPlaying = null; syncVideo(); }
+  if (d.type === 'error') showVidErr((YT_ERR[d.code] || '영상을 재생할 수 없어요.') + ` (오류 ${+d.code})`);
 });
 function applyBg() {
   const colors = bg.preset === 'custom' ? [bg.c1, bg.c2] : PRESETS[bg.preset] || PRESETS.sunday;
