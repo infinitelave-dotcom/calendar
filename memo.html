@@ -50,8 +50,10 @@
   #ttools button.danger { color:#FF9B8A; }
   /* 아래쪽 시트 탭 (엑셀처럼) */
   /* 탭이 많아 폭을 넘으면 옆으로 넘겨 보기: ◀ ▶ 버튼 · 마우스 휠 · 고른 탭으로 자동 이동. + 는 항상 오른쪽 끝에 */
-  .sheetrow { display:flex; align-items:flex-start; gap:2px; flex:none; height:34px; min-width:0; }
-  .sheets { display:flex; align-items:flex-start; gap:2px; overflow-x:auto; flex:1; min-width:0; height:34px; scrollbar-width:none; scroll-behavior:smooth; }
+  /* + 는 마지막 탭 바로 옆 (탭이 많을 때도 오른쪽 둥근 모서리에서 안쪽으로 떨어지게) */
+  .sheetrow { display:flex; align-items:flex-start; gap:2px; flex:none; height:34px; min-width:0; padding-right:18px; }
+  .sheets { display:flex; align-items:flex-start; gap:2px; overflow-x:auto; flex:0 1 auto; min-width:0; height:34px; scrollbar-width:none; scroll-behavior:smooth; }
+  .sheetrow .add { margin-left:4px; }
   .snav { flex:none; display:none; width:22px; height:26px; padding:0; border:0; border-radius:0 0 8px 8px; background:rgba(255,255,255,.3); color:#333;
           font-size:10px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,.2); }
   .snav:hover:not(:disabled) { background:rgba(255,255,255,.7); }
