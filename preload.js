@@ -28,5 +28,12 @@ contextBridge.exposeInMainWorld('api', {
   onYt: (cb) => ipcRenderer.on('yt-state', (_e, s) => cb(s)),
   onState: (cb) => ipcRenderer.on('state', (_e, s) => cb(s)),
   notify: (t, b) => ipcRenderer.send('notify', t, b),
+  // 백업
+  ask: (o) => ipcRenderer.invoke('ask', o),
+  backupSave: (json, name) => ipcRenderer.invoke('backup-save', json, name),
+  backupOpen: () => ipcRenderer.invoke('backup-open'),
+  backupAuto: (json, day) => ipcRenderer.send('backup-auto', json, day),
+  backupFolder: () => ipcRenderer.send('backup-folder'),
+  reloadAll: () => ipcRenderer.send('reload-all'),
   quit: () => ipcRenderer.send('quit')
 });

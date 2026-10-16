@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, globalShortcut, nativeImage, dialog, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, globalShortcut, nativeImage, dialog, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -368,6 +368,46 @@ ipcMain.on('reset', () => {
   if (main) main.focus();
   setTimeout(keepMemoAbove, 300);
 });
+// ── 백업 ──
+// 일정·메모·뽀모도로 기록·설정(창 안의 저장소 전체)을 JSON 파일 하나로 저장하고 불러온다.
+// 자동 백업: 하루에 한 번 사용자 폴더의 backups 에 저장하고 최근 7개만 남긴다.
+const backupDir = () => path.join(app.getPath('userData'), 'backups');
+const senderWin = e => BrowserWindow.fromWebContents(e.sender) || undefined;
+ipcMain.handle('ask', async (e, o) => {
+  const r = await dialog.showMessageBox(senderWin(e), { type: o.type || 'question', title: '바탕화면 캘린더', message: String(o.message || ''),
+    detail: o.detail ? String(o.detail) : undefined, buttons: o.buttons || ['확인', '취소'], defaultId: o.defaultId || 0,
+    cancelId: o.cancelId != null ? o.cancelId : (o.buttons || [0, 1]).length - 1, noLink: true });
+  return r.response;
+});
+ipcMain.handle('backup-save', async (e, json, name) => {
+  const r = await dialog.showSaveDialog(senderWin(e), { title: '백업 파일로 저장', defaultPath: path.join(app.getPath('documents'), String(name || 'calendar-backup.json').replace(/[\\/:*?"<>|]/g, '_')),
+    filters: [{ name: '달력 백업', extensions: ['json'] }] });
+  if (r.canceled || !r.filePath) return null;
+  try { fs.writeFileSync(r.filePath, json, 'utf8'); return r.filePath; }
+  catch (err) { dialog.showMessageBox(senderWin(e), { type: 'error', message: '백업 파일을 저장하지 못했어요.', detail: String(err.message || err) }); return null; }
+});
+ipcMain.handle('backup-open', async e => {
+  const r = await dialog.showOpenDialog(senderWin(e), { title: '백업 불러오기', defaultPath: app.getPath('documents'), properties: ['openFile'],
+    filters: [{ name: '달력 백업', extensions: ['json'] }] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  try {
+    if (fs.statSync(r.filePaths[0]).size > 300 * 1024 * 1024) return { error: '파일이 너무 커요.' };
+    return { text: fs.readFileSync(r.filePaths[0], 'utf8') };
+  } catch (err) { return { error: String(err.message || err) }; }
+});
+ipcMain.on('backup-auto', (_e, json, day) => {
+  try {
+    const dir = backupDir(); fs.mkdirSync(dir, { recursive: true });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+    fs.writeFileSync(path.join(dir, `auto-${day}.json`), json, 'utf8');
+    fs.readdirSync(dir).filter(f => /^auto-\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort().reverse().slice(7)
+      .forEach(f => { try { fs.unlinkSync(path.join(dir, f)); } catch {} });
+  } catch {}
+});
+ipcMain.on('backup-folder', () => { fs.mkdirSync(backupDir(), { recursive: true }); shell.openPath(backupDir()); });
+// 백업을 불러온 뒤 모든 창을 새로 그리기
+ipcMain.on('reload-all', () => { BrowserWindow.getAllWindows().forEach(w => { if (!w.isDestroyed()) w.webContents.reload(); }); });
+
 ipcMain.on('pomo-visible', (_e, on) => setPomodoro(on));
 ipcMain.on('pomo-action', (_e, name) => pomo.action(name));
 ipcMain.on('pomo-tray', (_e, d) => pomo.tray(d));

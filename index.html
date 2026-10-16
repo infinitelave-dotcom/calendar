@@ -231,6 +231,15 @@
       <div class="row" id="versionRow"></div>
       <button id="updateBtn" type="button">업데이트 확인</button>
       <hr>
+      <label>백업</label>
+      <div class="btns">
+        <button type="button" id="bkSave" title="일정·메모·뽀모도로 기록·설정을 파일 하나로 저장">백업 파일로 저장</button>
+        <button type="button" id="bkLoad" title="저장해 둔 백업 파일로 되돌리기">백업 불러오기</button>
+      </div>
+      <button type="button" id="bkFolder">자동 백업 폴더 열기</button>
+      <div class="hint">하루에 한 번 자동으로도 백업해 두고, 최근 7일치를 남겨요. 다른 컴퓨터로 옮길 때도 백업 파일을 불러오면 돼요.</div>
+      <div class="status" id="bkStatus"></div>
+      <hr>
       <div class="row"><b>바탕화면 캐릭터</b></div>
       <div class="row"><input type="checkbox" id="petOn"> 캐릭터가 화면을 돌아다니기</div>
       <div class="row">크기 <input type="range" id="petSize" min="48" max="200"></div>
@@ -762,17 +771,33 @@ $('petDefault').onclick = () => window.api.defaultPetImage();
 // 설정 초기화: 색상·투명도·창 위치·크기·잠금을 처음 상태로. 일정과 메모는 남긴다.
 // 전체 초기화: 일정·메모까지 모두 지운다.
 const SETTING_KEYS = ['cfg', 'memoCfg'];
-$('resetSettings').onclick = () => {
-  if (!confirm('색상, 투명도, 창 위치와 크기, 잠금을 처음 상태로 되돌릴까요?\n(일정과 메모는 그대로 남습니다)')) return;
+$('resetSettings').onclick = async () => {
+  if (!(await askBackupBefore('색상, 투명도, 창 위치와 크기, 잠금을 처음 상태로 되돌려요.\n(일정과 메모는 그대로 남습니다)'))) return;
   SETTING_KEYS.forEach(k => localStorage.removeItem(k));
   window.api.reset();
 };
-$('resetAll').onclick = () => {
-  if (!confirm('일정과 메모를 포함해 모든 내용을 지우고 처음 상태로 되돌릴까요?')) return;
-  if (!confirm('정말 모두 지울까요? 지운 일정과 메모는 되돌릴 수 없습니다.')) return;
+$('resetAll').onclick = async () => {
+  const r = await askBackupBefore('일정, 메모, 뽀모도로 기록을 포함해 모든 내용을 지우고 처음 상태로 되돌려요.');
+  if (!r) return;
+  if (r === 'skip' && !confirm('정말 모두 지울까요? 백업 없이 지운 일정과 메모는 되돌릴 수 없습니다.')) return;
   localStorage.clear();
   window.api.reset();
 };
+
+// ── 백업 ──
+const bkMsg = t => { $('bkStatus').textContent = t; clearTimeout(bkMsg.t); bkMsg.t = setTimeout(() => $('bkStatus').textContent = '', 6000); };
+$('bkSave').onclick = async () => { const p = await saveBackupFile(); if (p) bkMsg('백업했어요: ' + p); };
+$('bkLoad').onclick = () => restoreBackup();
+$('bkFolder').onclick = () => window.api.backupFolder();
+// 자동 백업: 하루에 한 번 (켜 둔 채로 날짜가 바뀌어도)
+function autoBackup() {
+  const day = ymdToday();
+  if (localStorage.getItem('lastAutoBackup') === day) return;
+  localStorage.setItem('lastAutoBackup', day);
+  window.api.backupAuto(backupJSON(), day);
+}
+setTimeout(autoBackup, 5000);
+setInterval(autoBackup, 60 * 60 * 1000);
 
 // 잠금 / 바탕화면 고정 / 메모 창
 let locked = false, memoVisible = true, ytVisible = false, pomoVisible = false;

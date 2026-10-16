@@ -650,17 +650,18 @@ document.querySelectorAll('#rPeriod button').forEach(b => b.onclick = () => {
   showReset();
 });
 $('rFrom').onchange = $('rTo').onchange = showReset;
-$('rLog').onclick = () => {
-  const log = load('pomoLog', []), targets = live(log).filter(inPeriod);
+$('rLog').onclick = async () => {
+  const targets = live(load('pomoLog', [])).filter(inPeriod);
   if (!targets.length) return;
-  if (!confirm(`${$('rCount').textContent}\n\n이 기록을 지울까요? 되돌릴 수 없어요.`)) return;
+  if (!(await askBackupBefore(`${$('rCount').textContent}\n이 기록을 지워요.`))) return;
+  const log = load('pomoLog', []);
   const ids = new Set(targets.map(r => r.id));
   log.forEach(r => { if (ids.has(r.id)) { r.deleted = true; touch(r); } });
   save('pomoLog', log);
   showReset(); draw();
 };
-$('rCfg').onclick = () => {
-  if (!confirm('집중·휴식 시간, 자동 시작, 소리, 배경과 가운데 사진을 처음 상태로 되돌릴까요? (기록은 그대로)')) return;
+$('rCfg').onclick = async () => {
+  if (!(await askBackupBefore('집중·휴식 시간, 자동 시작, 소리, 배경과 표지(사진·영상)를 처음 상태로 되돌려요. (기록은 그대로)'))) return;
   localStorage.removeItem('pomoCfg'); localStorage.removeItem('pomoBg'); localStorage.removeItem('pomoCycle');
   location.reload();
 };

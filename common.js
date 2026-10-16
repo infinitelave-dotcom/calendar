@@ -62,3 +62,48 @@ function applyTheme(cfg) {
 const BG_COLORS = ['#1B2A41','#22252B','#2E3B2F','#3B2433','#1F3A4D','#F3EFE6','#FFFFFF'];
 const AC_COLORS = ['#F2A65A','#FF8A80','#FFD166','#8BD3A0','#7FC8F8','#B69CFF'];
 const loadCfg = () => Object.assign({ opacity: 85, mon: false, bg: BG_COLORS[0], fg: 'auto', shadow: true, accent: AC_COLORS[0], evColor: '#F2A65A' }, load('cfg', {}));
+
+// ── 백업 ──
+// 창 안의 저장소(localStorage)를 통째로 파일 하나에. 일정·메모·뽀모도로 기록·설정·표지 사진이 모두 들어간다.
+const BACKUP_APP = 'desktop-calendar';
+const ymdToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function backupJSON() {
+  const data = {};
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); data[k] = localStorage.getItem(k); }
+  return JSON.stringify({ app: BACKUP_APP, version: 1, created: new Date().toISOString(), data });
+}
+// 백업 파일로 저장 → 저장한 경로 (취소하면 null)
+const saveBackupFile = () => window.api.backupSave(backupJSON(), `달력백업-${ymdToday()}.json`);
+// 초기화 전에 물어보기: 'saved'(저장함) | 'skip'(저장 안 함) | null(취소)
+async function askBackupBefore(what) {
+  const i = await window.api.ask({
+    message: '초기화하기 전에 저장하시겠습니까?',
+    detail: `${what}\n\n지금 내용을 백업 파일로 저장해 두면 나중에 '백업 불러오기'로 되돌릴 수 있어요.`,
+    buttons: ['저장하고 초기화', '저장하지 않고 초기화', '취소'], defaultId: 0, cancelId: 2,
+  });
+  if (i === 2) return null;
+  if (i === 0) return (await saveBackupFile()) ? 'saved' : null;   // 저장 창에서 취소하면 초기화도 하지 않는다
+  return 'skip';
+}
+// 백업 불러오기: 지금 내용을 백업 내용으로 바꾸고 모든 창을 새로 그린다
+async function restoreBackup() {
+  const r = await window.api.backupOpen();
+  if (!r) return false;
+  let b = null;
+  try { b = JSON.parse(r.text); } catch {}
+  if (r.error || !b || b.app !== BACKUP_APP || !b.data || typeof b.data !== 'object') {
+    alert('이 앱의 백업 파일이 아니거나 파일이 망가졌어요.' + (r.error ? '\n' + r.error : '')); return false;
+  }
+  const when = new Date(b.created);
+  const i = await window.api.ask({
+    message: '백업을 불러올까요?',
+    detail: `${isNaN(when) ? '' : when.toLocaleString('ko-KR') + ' 에 만든 백업이에요.\n'}지금의 일정·메모·뽀모도로 기록·설정이 모두 백업 내용으로 바뀌어요.`,
+    buttons: ['지금 내용 저장하고 불러오기', '저장하지 않고 불러오기', '취소'], defaultId: 0, cancelId: 2,
+  });
+  if (i === 2) return false;
+  if (i === 0 && !(await saveBackupFile())) return false;
+  localStorage.clear();
+  for (const [k, v] of Object.entries(b.data)) if (typeof v === 'string') localStorage.setItem(k, v);
+  window.api.reloadAll();
+  return true;
+}
