@@ -219,7 +219,7 @@
     <div class="note" id="vidName"></div>
     <label>타이머와 함께 재생·멈춤 <input type="checkbox" class="sw" id="ytSync"></label>
     <label>배경 흐리게 <input type="range" id="blur" min="0" max="30"></label>
-    <div class="note">사진을 넣으면 가운데 레코드판이 그 사진(둥근 사각형)으로 바뀌고, 배경에도 흐리게 깔려요. 5MB 이하 사진만 쓸 수 있어요.<br>유튜브 주소를 넣거나 컴퓨터의 동영상 파일(mp4 권장)을 고르면 표지 자리에서 그 영상이 나와요. 레코드판을 누르면 원래대로 돌아가요.</div>
+    <div class="note">사진을 넣으면 가운데 레코드판이 그 사진(둥근 사각형)으로 바뀌고, 배경에도 흐리게 깔려요. 5MB 이하 사진만 쓸 수 있어요.<br>유튜브 주소를 넣거나 컴퓨터의 동영상 파일(mp4 권장)을 고르면 표지 자리에서 그 영상이 소리 없이 나와요. (영상의 스피커 버튼으로 소리 켜기) 레코드판을 누르면 원래대로 돌아가요.</div>
     <h4>초기화</h4>
     <div class="reset-box">
       <div class="seg" id="rPeriod">
@@ -305,6 +305,7 @@ function showVideo() {
     // 컴퓨터의 동영상 파일: 계속 반복, 마우스를 올리면 소리·위치 조절 막대
     fileVid = document.createElement('video');
     fileVid.loop = true; fileVid.playsInline = true; fileVid.controls = true; fileVid.preload = 'auto';
+    fileVid.muted = fileVid.defaultMuted = true;   // 처음엔 소리 없이 (스피커 버튼으로 켤 수 있다)
     fileVid.disablePictureInPicture = true; fileVid.setAttribute('controlslist', 'nodownload noplaybackrate noremoteplayback');
     fileVid.onerror = () => showVidErr('동영상을 열 수 없어요. 파일을 옮기거나 지웠는지, 재생할 수 있는 형식(mp4·webm)인지 확인해 주세요.');
     fileVid.onloadeddata = () => { ytPlaying = null; syncVideo(); };

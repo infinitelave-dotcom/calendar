@@ -26,13 +26,14 @@ function apply(cmd) {
 }
 window.onYouTubeIframeAPIReady = () => {
   if (!(v && ok(v)) && !(list && ok(list))) { send({ type: 'error', code: 2 }); return; }
-  const vars = { playsinline: 1, rel: 0, loop: 1 };
+  const vars = { playsinline: 1, rel: 0, loop: 1, mute: 1 };
   if (list && ok(list)) { vars.listType = 'playlist'; vars.list = list; } else vars.playlist = v;   // 한 곡이면 계속 반복
   player = new YT.Player('p', {
     videoId: v && ok(v) ? v : undefined,
     playerVars: vars,
     events: {
-      onReady() { ready = true; send({ type: 'ready' }); if (want) apply(want); },
+      // 처음엔 소리 없이 (영상 아래 스피커 버튼으로 켤 수 있다)
+      onReady() { player.mute(); ready = true; send({ type: 'ready' }); if (want) apply(want); },
       onError(e) { send({ type: 'error', code: e.data }); },
       onStateChange(e) { send({ type: 'state', state: e.data }); },
     },
