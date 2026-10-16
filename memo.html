@@ -49,7 +49,14 @@
   #ttools button:hover { background:rgba(255,255,255,.15); }
   #ttools button.danger { color:#FF9B8A; }
   /* 아래쪽 시트 탭 (엑셀처럼) */
-  .sheets { display:flex; align-items:flex-start; gap:2px; overflow-x:auto; flex:none; height:34px; scrollbar-width:none; }
+  /* 탭이 많아 폭을 넘으면 옆으로 넘겨 보기: ◀ ▶ 버튼 · 마우스 휠 · 고른 탭으로 자동 이동. + 는 항상 오른쪽 끝에 */
+  .sheetrow { display:flex; align-items:flex-start; gap:2px; flex:none; height:34px; min-width:0; }
+  .sheets { display:flex; align-items:flex-start; gap:2px; overflow-x:auto; flex:1; min-width:0; height:34px; scrollbar-width:none; scroll-behavior:smooth; }
+  .snav { flex:none; display:none; width:22px; height:26px; padding:0; border:0; border-radius:0 0 8px 8px; background:rgba(255,255,255,.3); color:#333;
+          font-size:10px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,.2); }
+  .snav:hover:not(:disabled) { background:rgba(255,255,255,.7); }
+  .snav:disabled { opacity:.35; cursor:default; }
+  .sheetrow.over .snav { display:block; }
   .sheets::-webkit-scrollbar { display:none; }
   .sheet { min-width:34px; height:26px; padding:0 12px; border-radius:0 0 8px 8px; color:var(--ink); background:rgba(255,255,255,.55);
            font-size:13px; line-height:26px; cursor:pointer; white-space:nowrap; flex:none; box-shadow:0 2px 4px var(--shadow); opacity:.8; text-shadow:var(--ts); }
@@ -76,7 +83,11 @@
     <div class="opbar" id="opbar">투명도 <input type="range" id="opacity" min="15" max="100"><span id="opVal"></span></div>
     <div id="text" contenteditable="true" spellcheck="false" data-ph="여기에 메모를 적으세요"></div>
   </div>
-  <div class="sheets" id="sheets"></div>
+  <div class="sheetrow" id="sheetrow">
+    <button class="snav" id="sPrev" title="왼쪽 탭 보기">◀</button>
+    <div class="sheets" id="sheets"></div>
+    <button class="snav" id="sNext" title="오른쪽 탭 보기">▶</button>
+  </div>
 </div>
 <div id="ttools">
   <button data-t="rowAdd" title="아래에 줄 추가">+ 줄</button>
@@ -151,7 +162,8 @@ function render() {
     dots.append(d);
   });
   // 시트 탭
-  const bar = $('sheets'); bar.innerHTML = '';
+  const bar = $('sheets'), keep = bar.scrollLeft; bar.innerHTML = '';
+  let activeTab = null;
   liveMemos().forEach(memo => {
     const tab = document.createElement('div');
     tab.className = 'sheet' + (memo.id === m.id ? ' on' : '');
@@ -163,6 +175,7 @@ function render() {
       onDone: v => { if (v !== null && v !== memo.title) { memo.title = v; touch(memo); saveMemos(); } render(); } });
     tab.oncontextmenu = e => { e.preventDefault(); remove(memo); };
     bar.append(tab);
+    if (memo.id === m.id) activeTab = tab;
   });
   const add = document.createElement('button');
   add.className = 'add'; add.textContent = '+'; add.title = '새 메모';
@@ -170,8 +183,33 @@ function render() {
     const memo = touch({ id: uid(), title: '', html: '', text: '', color: MEMO_COLORS[liveMemos().length % MEMO_COLORS.length] });
     memos.push(memo); active = memo.id; saveMemos(); render(); ed.focus();
   };
-  bar.append(add);
+  const row = $('sheetrow'); row.querySelectorAll('.add').forEach(b => b.remove()); row.append(add);
+  // 다시 그려도 보던 자리 그대로, 고른 탭은 보이게
+  bar.style.scrollBehavior = 'auto'; bar.scrollLeft = keep; bar.style.scrollBehavior = '';
+  if (activeTab) {
+    const l = activeTab.offsetLeft - bar.offsetLeft, r = l + activeTab.offsetWidth;
+    if (l < bar.scrollLeft) bar.scrollLeft = l - 8;
+    else if (r > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = r - bar.clientWidth + 8;
+  }
+  updateSheetNav();
 }
+
+// 탭 줄 옆으로 넘기기
+function updateSheetNav() {
+  const bar = $('sheets');
+  const over = bar.scrollWidth > bar.clientWidth + 1;
+  $('sheetrow').classList.toggle('over', over);
+  $('sPrev').disabled = bar.scrollLeft <= 0;
+  $('sNext').disabled = bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 1;
+}
+$('sPrev').onclick = () => { $('sheets').scrollLeft -= $('sheets').clientWidth * .7; };
+$('sNext').onclick = () => { $('sheets').scrollLeft += $('sheets').clientWidth * .7; };
+$('sheets').addEventListener('scroll', updateSheetNav);
+// 마우스 휠을 굴려도 옆으로
+$('sheets').addEventListener('wheel', e => {
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { e.preventDefault(); $('sheets').scrollLeft += e.deltaY; }
+}, { passive: false });
+window.addEventListener('resize', updateSheetNav);
 
 function remove(memo) {
   if (liveMemos().length === 1) {
