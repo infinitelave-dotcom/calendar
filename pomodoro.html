@@ -217,7 +217,6 @@
     <div class="yrow"><input id="ytUrl" placeholder="유튜브 주소 붙여넣기" spellcheck="false"><button class="sbtn" id="ytSet" type="button">영상 넣기</button></div>
     <button class="sbtn" id="pickVid" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="3"/><path d="M16 10l5-3v10l-5-3z"/></svg>동영상 파일 넣기</button>
     <div class="note" id="vidName"></div>
-    <label>타이머와 함께 재생·멈춤 <input type="checkbox" class="sw" id="ytSync"></label>
     <label>배경 흐리게 <input type="range" id="blur" min="0" max="30"></label>
     <div class="note">사진을 넣으면 가운데 레코드판이 그 사진(둥근 사각형)으로 바뀌고, 배경에도 흐리게 깔려요. 5MB 이하 사진만 쓸 수 있어요.<br>유튜브 주소를 넣거나 컴퓨터의 동영상 파일(mp4 권장)을 고르면 표지 자리에서 그 영상이 소리 없이 나와요. (영상의 스피커 버튼으로 소리 켜기) 레코드판을 누르면 원래대로 돌아가요.</div>
     <h4>초기화</h4>
@@ -319,14 +318,11 @@ function showVideo() {
   box.prepend(ytFrame);
 }
 function showVidErr(msg) { $('vidErrMsg').textContent = msg; $('vidErr').classList.add('on'); }
-// 타이머가 돌면 영상도 재생, 멈추면 영상도 멈춤
+// 표지 영상은 타이머와 상관없이 창을 켜는(영상을 넣는) 순간 바로 재생. 그 뒤로는 영상의 버튼으로 직접 조작
 function syncVideo() {
-  if ((!ytFrame && !fileVid) || !bg.ytSync) return;
-  const want = running();
-  if (want === ytPlaying) return;
-  ytPlaying = want;
-  if (fileVid) { if (want) fileVid.play().catch(() => {}); else fileVid.pause(); }
-  else ytCmd(want ? 'play' : 'pause');
+  if ((!ytFrame && !fileVid) || ytPlaying) return;
+  ytPlaying = true;
+  if (fileVid) fileVid.play().catch(() => {}); else ytCmd('play');
 }
 const YT_ERR = {
   2: '유튜브 주소가 올바르지 않아요.',
@@ -353,7 +349,6 @@ function applyBg() {
   // 가운데: 유튜브 영상 > 사진(둥근 사각형 표지) > 레코드판
   document.body.classList.toggle('hasVid', !!(bg.yt || bg.vfile));
   showVideo();
-  $('ytSync').checked = bg.ytSync;
   $('vidName').textContent = bg.vfile ? '🎬 ' + bg.vfile.name : '';
   if (document.activeElement !== $('ytUrl')) $('ytUrl').value = bg.yt ? ytLink(bg.yt) : '';
   document.body.classList.toggle('hasArt', !!bg.image);
@@ -390,7 +385,6 @@ $('ytSet').onclick = () => {
   bg.yt = y; bg.image = null; bg.vfile = null; $('ytUrl').blur(); saveBg();
 };
 $('ytUrl').onkeydown = e => { if (e.key === 'Enter') $('ytSet').click(); };
-$('ytSync').onchange = e => { bg.ytSync = e.target.checked; ytPlaying = null; saveBg(); syncVideo(); };
 $('vidOpen').onclick = () => { if (!bg.yt) return; window.api.setYoutube(true); window.api.ytAction('search', ytLink(bg.yt)); };
 $('blur').oninput = e => { bg.blur = +e.target.value; saveBg(); };
 
