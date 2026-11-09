@@ -58,6 +58,15 @@
   .chip { cursor:grab; }
   body.moving, body.moving * { cursor:grabbing !important; }
   body.moving .chip.src { opacity:.35; }
+  /* Ctrl 을 누른 채 끌면 복사 (원래 일정은 그대로) */
+  body.copying, body.copying * { cursor:copy !important; }
+  /* 일정 복사 → 날짜를 눌러 붙여넣기 */
+  .clipbar { display:flex; align-items:center; gap:8px; background:var(--accent); color:#1B2A41; text-shadow:none; border-radius:8px; padding:5px 6px 5px 12px; font-size:13px; font-weight:700; }
+  .clipbar[hidden] { display:none; }
+  .clipbar span { max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .clipbar button { background:rgba(0,0,0,.12); color:#1B2A41; text-shadow:none; padding:3px 9px; font-size:12px; }
+  body.pasting #days .day { cursor:copy; }
+  body.pasting #days .day:hover { box-shadow:inset 0 0 0 2px var(--accent); }
   .day.drop { box-shadow:inset 0 0 0 2px var(--accent); background:color-mix(in srgb, var(--accent) 22%, transparent); }
   /* 일정 띠 양 끝을 끌어서 날짜 늘이기·줄이기 */
   .chip { position:relative; }
@@ -203,6 +212,7 @@
         <button id="qClear" type="button" title="검색 지우기">✕</button>
       </div>
       <div class="cfilter" id="cfilter"></div>
+      <div class="clipbar" id="clipBar" hidden><span id="clipText"></span><button type="button" id="clipCancel" title="복사 끝내기 (Esc)">✕ 그만</button></div>
       <label class="opq" title="배경 투명도 (낮을수록 바탕화면이 비쳐 보여요)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
         투명도 <input type="range" id="opacity2" min="10" max="100"><span id="opVal"></span>
@@ -419,7 +429,7 @@ function render() {
       c.className = 'chip' + (multi && k > ev.start && !rowStart ? ' cl' : '') + (multi && k < ev.end && !rowEnd ? ' cr' : '');
       c.style.background = ev.color; c.style.color = isLight(ev.color) ? '#1B2A41' : '#F6F4EE';
       c.textContent = (!multi || k === ev.start || rowStart) ? (ev.time && k === ev.start ? ev.time + ' ' : '') + ev.text : ' ';
-      c.title = ev.text + '\n끌어서 다른 날짜로 옮기기 · 양 끝을 끌어서 기간 바꾸기 · 더블클릭해서 이름 수정'; c.dataset.id = ev.id;
+      c.title = ev.text + '\n끌어서 다른 날짜로 옮기기 · Ctrl 누른 채 끌면 복사 · 양 끝을 끌어서 기간 바꾸기 · 더블클릭해서 이름 수정'; c.dataset.id = ev.id;
       // 시작 날/끝 날 칸에는 끌어서 날짜를 바꾸는 손잡이
       if (k === ev.start) { const h = document.createElement('span'); h.className = 'h hs'; h.dataset.edge = 'start'; c.append(h); }
       if (k === ev.end) { const h = document.createElement('span'); h.className = 'h he'; h.dataset.edge = 'end'; c.append(h); }
@@ -429,6 +439,7 @@ function render() {
     box.append(cell);
   }
   renderTabs();
+  showClip();
   renderFilter();
   renderSide();
 }
@@ -529,9 +540,11 @@ function renderSide() {
       if (e.target.closest('.meta')) editDates(ev, m); else edit();
     };
     info.append(t); row.append(info);
+    const cp = document.createElement('button'); cp.textContent = '복사'; cp.title = '복사한 뒤 달력에서 날짜를 누르면 그 날에 붙여넣어요';
+    cp.onclick = () => copyEvent(ev);
     const del = document.createElement('button'); del.textContent = '삭제';
     del.onclick = () => { ev.deleted = true; touch(ev); saveEvents(); render(); };
-    row.append(del); $('list').append(row);
+    row.append(cp, del); $('list').append(row);
   });
 }
 
@@ -660,6 +673,33 @@ function editDates(ev, el) {
 const addDays = (k, n) => { const d = parse(k); d.setDate(d.getDate() + n); return key(d); };
 const diffDays = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
 
+// ── 일정 복사 ──
+// 목록의 '복사' → 위에 안내 띠가 뜨고, 달력에서 날짜를 누를 때마다 그 날에 붙여넣는다 (기간·시간·색은 그대로).
+// 다른 캘린더 탭으로 바꿔서 누르면 그 캘린더로 복사된다. Esc 또는 '그만'으로 끝내기.
+let clip = null;
+function copyEvent(ev) {
+  clip = { text: ev.text, time: ev.time || '', color: ev.color, len: diffDays(ev.start, ev.end) };
+  showClip();
+}
+function showClip() {
+  document.body.classList.toggle('pasting', !!clip && !isPomo());
+  $('clipBar').hidden = !clip;
+  if (clip) $('clipText').textContent = isPomo()
+    ? `📋 '${clip.text}' 복사됨 · 일정 캘린더 탭을 고른 뒤 날짜를 누르세요`
+    : `📋 '${clip.text}' 복사됨 · 붙여넣을 날짜를 누르세요`;
+}
+function endClip() { clip = null; showClip(); }
+// 일정 하나를 다른 날짜로 복사 (붙여넣기·Ctrl+끌기 공통)
+function pasteEvent(src, start, cal) {
+  const ev = touch({ id: uid(), cal, text: src.text, start, end: addDays(start, src.len), time: src.time || '', color: src.color });
+  events.push(ev); saveEvents();
+  return ev;
+}
+$('clipCancel').onclick = endClip;
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && clip && !e.target.closest('input, textarea')) endClip();
+});
+
 // 일정 띠 끌기: { ev, mode: 'move'(통째로 옮기기) | 'start' | 'end'(한쪽 끝만), from(잡은 날), over(지금 마우스가 있는 날) }
 let moving = null;
 // 끌기가 끝나면 바뀔 기간
@@ -672,7 +712,7 @@ function movedRange() {
 function showDrop() {
   const ev = moving.ev, [s0, s1] = movedRange(), changed = s0 !== ev.start || s1 !== ev.end;
   document.querySelectorAll('#days .day').forEach(c => c.classList.toggle('drop', changed && c.dataset.k >= s0 && c.dataset.k <= s1));
-  document.querySelectorAll('#days .chip').forEach(c => c.classList.toggle('src', changed && c.dataset.id === ev.id));
+  document.querySelectorAll('#days .chip').forEach(c => c.classList.toggle('src', changed && !moving.copy && c.dataset.id === ev.id));
 }
 
 // 날짜 클릭 / 끌어서 여러 날 선택
@@ -681,6 +721,12 @@ let dragging = false;
 let lastChip = { id: null, t: 0 };
 $('days').addEventListener('mousedown', e => {
   const el = e.target.closest('.day'); if (!el || e.button !== 0) return;
+  if (clip && !isPomo()) {   // 복사 중: 누른 날짜에 붙여넣기
+    e.preventDefault();
+    pasteEvent(clip, el.dataset.k, activeCal);
+    selStart = el.dataset.k; selEnd = addDays(el.dataset.k, clip.len); lastChip.id = null;
+    render(); return;
+  }
   const chip = e.target.closest('.chip');
   const dbl = chip && chip.dataset.id === lastChip.id && Date.now() - lastChip.t < 450;
   lastChip = { id: chip ? chip.dataset.id : null, t: Date.now() };
@@ -693,7 +739,9 @@ $('days').addEventListener('mousedown', e => {
   if (chip) {   // 일정 띠를 잡으면: 끌면 옮기기, 그냥 놓으면 그 날짜 고르기
     const ev = events.find(x => x.id === chip.dataset.id);
     const edge = e.target.closest('.h');
-    if (ev) { e.preventDefault(); moving = { ev, mode: edge ? edge.dataset.edge : 'move', from: el.dataset.k, over: el.dataset.k }; return; }
+    // Ctrl(또는 Alt)를 누른 채 끌면 옮기지 않고 복사
+    const copy = !edge && (e.ctrlKey || e.altKey);
+    if (ev) { e.preventDefault(); moving = { ev, mode: edge ? edge.dataset.edge : 'move', copy, from: el.dataset.k, over: el.dataset.k }; return; }
   }
   dragging = true; selStart = selEnd = el.dataset.k; render();
 });
@@ -702,7 +750,7 @@ $('days').addEventListener('mouseover', e => {
     const el = e.target.closest('.day'); if (!el) return;
     if (el.dataset.k !== moving.over) {
       moving.over = el.dataset.k;
-      document.body.classList.toggle(moving.mode === 'move' ? 'moving' : 'resizing', moving.over !== moving.from);
+      document.body.classList.toggle(moving.copy ? 'copying' : moving.mode === 'move' ? 'moving' : 'resizing', moving.over !== moving.from);
       showDrop();
     }
     return;
@@ -713,9 +761,15 @@ $('days').addEventListener('mouseover', e => {
 });
 window.addEventListener('mouseup', () => {
   if (moving) {
-    const [s0, s1] = movedRange(), { ev, from, over, mode } = moving; moving = null;
-    document.body.classList.remove('moving', 'resizing');
-    if (s0 !== ev.start || s1 !== ev.end) {
+    const [s0, s1] = movedRange(), { ev, from, over, mode, copy } = moving; moving = null;
+    document.body.classList.remove('moving', 'resizing', 'copying');
+    if (copy && s0 !== ev.start) {   // Ctrl+끌기: 새 날짜에 복사본
+      lastChip.id = null;
+      pasteEvent({ text: ev.text, time: ev.time, color: ev.color, len: diffDays(ev.start, ev.end) }, s0, calOf(ev));
+      selStart = selEnd = over;
+    } else if (copy) {
+      selStart = selEnd = from;
+    } else if (s0 !== ev.start || s1 !== ev.end) {
       lastChip.id = null;   // 끌기 다음에 바로 누른 것은 더블클릭으로 치지 않는다
       ev.start = s0; ev.end = s1; touch(ev); saveEvents();
       selStart = selEnd = mode === 'move' ? over : (mode === 'start' ? s0 : s1);
