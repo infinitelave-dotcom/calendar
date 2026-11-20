@@ -40,6 +40,8 @@ if (process.platform === 'win32') {
       SetWindowPos: u.func('bool __stdcall SetWindowPos(intptr hwnd, intptr after, int x, int y, int cx, int cy, uint flags)'),
       RedrawWindow: u.func('bool __stdcall RedrawWindow(intptr hwnd, intptr rect, intptr rgn, uint flags)'),
       IsWindow: u.func('bool __stdcall IsWindow(intptr hwnd)'),
+      SpiGet: u.func('bool __stdcall SystemParametersInfoW(uint act, uint len, void *buf, uint ini)'),
+      SpiSet: u.func('bool __stdcall SystemParametersInfoW(uint act, uint len, str16 path, uint ini)'),
     };
   } catch (e) {
     console.error('윈도우 API를 불러오지 못했습니다:', e);
@@ -60,6 +62,20 @@ function refreshDesktop(extra) {
     try { targets.add(findWorkerW()); } catch {}
     targets.forEach(h => { if (h && win32.IsWindow(h)) win32.RedrawWindow(h, 0, 0, RDW); });
   } catch (e) { console.error(e); }
+}
+
+// 배경화면을 같은 그림으로 다시 깔아서 바탕화면 전체를 새로 그리게 한다 (남은 검은 자국 지우기).
+// 배경화면 설정 자체는 바꾸지 않는다 (같은 파일을 다시 적용, 설정 파일에도 쓰지 않음).
+function repaintWallpaper() {
+  if (!win32) return false;
+  try {
+    const buf = Buffer.alloc(1040);
+    if (!win32.SpiGet(0x0073, 520, buf, 0)) return false;          // SPI_GETDESKWALLPAPER
+    const wp = buf.toString('utf16le').split('\0')[0];
+    if (wp) win32.SpiSet(0x0014, 0, wp, 0x2);                        // SPI_SETDESKWALLPAPER + SPIF_SENDCHANGE
+    refreshDesktop();
+    return true;
+  } catch (e) { console.error(e); return false; }
 }
 
 function findWorkerW() {
@@ -275,6 +291,7 @@ function buildTrayMenu() {
     { label: '컴퓨터 켤 때 자동 실행', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,
       click: (i) => app.setLoginItemSettings({ openAtLogin: i.checked }) },
     { type: 'separator' },
+    { label: '바탕화면 새로 그리기 (검은 자국 지우기)', click: () => { repaintWallpaper(); if (mode === 'desktop') setTimeout(enterDesktopMode, 400); } },
     { label: `업데이트 확인 (현재 ${app.getVersion()})`, click: () => checkForUpdates(true) },
     { label: '종료', click: () => app.quit() },
   ]));
@@ -342,7 +359,7 @@ function createMainWindow() {
   main.win.on('closed', () => {
     // 프로그램을 끄는 중이 아닌데 달력 창이 없어지면 잠시 뒤 다시 띄운다
     const wasEmbedded = main.embedded; main.embedded = false;
-    if (wasEmbedded) refreshDesktop(main.parent);   // 사라진 자리의 검은 네모 지우기
+    if (wasEmbedded) { refreshDesktop(main.parent); setTimeout(repaintWallpaper, 300); }   // 사라진 자리의 검은 네모 지우기
     if (quitting) return;
     if (managed.main === main) setTimeout(() => { if (!quitting) recoverMain(); }, 800);
   });
@@ -488,7 +505,7 @@ app.on('before-quit', () => {
   // 종료 전에 바탕화면에서 떼어내야 창이 깔끔하게 닫힌다
   allWindows().forEach(unembed);
 });
-app.on('will-quit', () => { globalShortcut.unregisterAll(); refreshDesktop(); });
+app.on('will-quit', () => { globalShortcut.unregisterAll(); if (mode === 'desktop') repaintWallpaper(); else refreshDesktop(); });
 // 그래픽 처리(GPU)가 다시 시작되면 투명 창이 검게 남을 수 있어서 달력·메모를 다시 그린다
 app.on('child-process-gone', (_e, d) => {
   if (quitting || d.type !== 'GPU') return;
