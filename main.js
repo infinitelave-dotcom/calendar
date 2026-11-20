@@ -38,6 +38,8 @@ if (process.platform === 'win32') {
       SetParent: u.func('intptr __stdcall SetParent(intptr child, intptr parent)'),
       GetWindowRect: u.func('bool __stdcall GetWindowRect(intptr hwnd, _Out_ RECT *rect)'),
       SetWindowPos: u.func('bool __stdcall SetWindowPos(intptr hwnd, intptr after, int x, int y, int cx, int cy, uint flags)'),
+      RedrawWindow: u.func('bool __stdcall RedrawWindow(intptr hwnd, intptr rect, intptr rgn, uint flags)'),
+      IsWindow: u.func('bool __stdcall IsWindow(intptr hwnd)'),
     };
   } catch (e) {
     console.error('윈도우 API를 불러오지 못했습니다:', e);
@@ -47,6 +49,17 @@ if (process.platform === 'win32') {
 function hwndOf(w) {
   const buf = w.getNativeWindowHandle();
   return buf.length >= 8 ? Number(buf.readBigUInt64LE(0)) : buf.readUInt32LE(0);
+}
+
+// 바탕화면 다시 그리기: 붙어 있던 달력 창이 사라진 자리에 검은 네모가 남지 않게
+function refreshDesktop(extra) {
+  if (!win32) return;
+  try {
+    const RDW = 0x1 | 0x4 | 0x80 | 0x100 | 0x400;   // INVALIDATE | ERASE | ALLCHILDREN | UPDATENOW | FRAME
+    const targets = new Set([extra, win32.FindWindowW('Progman', null)]);
+    try { targets.add(findWorkerW()); } catch {}
+    targets.forEach(h => { if (h && win32.IsWindow(h)) win32.RedrawWindow(h, 0, 0, RDW); });
+  } catch (e) { console.error(e); }
 }
 
 function findWorkerW() {
@@ -87,6 +100,7 @@ function embed(m) {
     if (!workerw) return;
     const pr = {}; win32.GetWindowRect(workerw, pr);
     win32.SetParent(hwnd, workerw);
+    m.parent = workerw;
     win32.SetWindowPos(hwnd, 0, r.left - pr.left, r.top - pr.top, r.right - r.left, r.bottom - r.top,
                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
     m.embedded = true;
@@ -95,7 +109,7 @@ function embed(m) {
 
 function unembed(m) {
   if (!win32 || !m || !m.embedded) return;
-  if (m.win.isDestroyed()) { m.embedded = false; return; }
+  if (m.win.isDestroyed()) { m.embedded = false; refreshDesktop(m.parent); return; }
   try {
     const hwnd = hwndOf(m.win);
     const r = {}; win32.GetWindowRect(hwnd, r);
@@ -103,6 +117,7 @@ function unembed(m) {
     win32.SetWindowPos(hwnd, 0, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_SHOWWINDOW);
   } catch (e) { console.error(e); }
   m.embedded = false;
+  refreshDesktop(m.parent);   // 떼어낸 자리를 바탕화면이 다시 그리게
 }
 
 function allWindows() { return Object.values(managed).filter(m => m.win && !m.win.isDestroyed()); }
@@ -203,6 +218,11 @@ function makeWindow(key, file, defaults) {
     if (key === 'memo' && !quitting) { e.preventDefault(); setMemoVisible(false); }
   });
   win.webContents.on('did-finish-load', notifyRenderers);
+  // 창 안의 화면이 멈추거나 꺼지면 검은 네모만 남는다 → 다시 불러오기
+  win.webContents.on('render-process-gone', (_e, d) => {
+    if (quitting || d.reason === 'clean-exit') return;
+    setTimeout(() => { if (!win.isDestroyed()) win.webContents.reload(); }, 1000);
+  });
   return m;
 }
 
@@ -321,8 +341,10 @@ function createMainWindow() {
   main.win.on('focus', () => setTimeout(keepMemoAbove, 30));
   main.win.on('closed', () => {
     // 프로그램을 끄는 중이 아닌데 달력 창이 없어지면 잠시 뒤 다시 띄운다
+    const wasEmbedded = main.embedded; main.embedded = false;
+    if (wasEmbedded) refreshDesktop(main.parent);   // 사라진 자리의 검은 네모 지우기
     if (quitting) return;
-    if (managed.main === main) { main.embedded = false; setTimeout(() => { if (!quitting) recoverMain(); }, 800); }
+    if (managed.main === main) setTimeout(() => { if (!quitting) recoverMain(); }, 800);
   });
   return main;
 }
@@ -466,5 +488,10 @@ app.on('before-quit', () => {
   // 종료 전에 바탕화면에서 떼어내야 창이 깔끔하게 닫힌다
   allWindows().forEach(unembed);
 });
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => { globalShortcut.unregisterAll(); refreshDesktop(); });
+// 그래픽 처리(GPU)가 다시 시작되면 투명 창이 검게 남을 수 있어서 달력·메모를 다시 그린다
+app.on('child-process-gone', (_e, d) => {
+  if (quitting || d.type !== 'GPU') return;
+  setTimeout(() => allWindows().forEach(m => { if (!m.win.isDestroyed()) m.win.webContents.reload(); }), 1500);
+});
 app.on('window-all-closed', () => app.quit());
