@@ -125,7 +125,7 @@ function embed(m) {
 
 function unembed(m) {
   if (!win32 || !m || !m.embedded) return;
-  if (m.win.isDestroyed()) { m.embedded = false; refreshDesktop(m.parent); return; }
+  if (m.win.isDestroyed()) { m.embedded = false; return; }
   try {
     const hwnd = hwndOf(m.win);
     const r = {}; win32.GetWindowRect(hwnd, r);
@@ -133,7 +133,6 @@ function unembed(m) {
     win32.SetWindowPos(hwnd, 0, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_SHOWWINDOW);
   } catch (e) { console.error(e); }
   m.embedded = false;
-  refreshDesktop(m.parent);   // 떼어낸 자리를 바탕화면이 다시 그리게
 }
 
 function allWindows() { return Object.values(managed).filter(m => m.win && !m.win.isDestroyed()); }
@@ -234,11 +233,6 @@ function makeWindow(key, file, defaults) {
     if (key === 'memo' && !quitting) { e.preventDefault(); setMemoVisible(false); }
   });
   win.webContents.on('did-finish-load', notifyRenderers);
-  // 창 안의 화면이 멈추거나 꺼지면 검은 네모만 남는다 → 다시 불러오기
-  win.webContents.on('render-process-gone', (_e, d) => {
-    if (quitting || d.reason === 'clean-exit') return;
-    setTimeout(() => { if (!win.isDestroyed()) win.webContents.reload(); }, 1000);
-  });
   return m;
 }
 
@@ -324,6 +318,7 @@ function setupUpdater() {
   autoUpdater.on('update-downloaded', () => {
     quitting = true;
     allWindows().forEach(unembed);
+    quitting = true; allWindows().forEach(unembed);   // 바탕화면에서 먼저 떼어내고 설치 (붙은 채 닫히면 자국이 남을 수 있음)
     autoUpdater.quitAndInstall(true, true);
   });
   autoUpdater.on('error', (err) => { if (updateBusy === 'manual') showUpdateError(err); updateBusy = false; });
@@ -352,30 +347,19 @@ function showUpdateError(err) {
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', () => { if (app.isReady() && managed.main) enterEditMode(); });
 
-// 달력 창 만들기 (처음 켤 때, 그리고 창이 사라졌을 때 다시)
+// 달력 창 만들기 (처음 켤 때, 그리고 창이 없어진 뒤 사용자가 다시 열려고 할 때)
 function createMainWindow() {
   const main = makeWindow('main', 'index.html', { width: 1000, height: 700, minWidth: 640, minHeight: 460 });
   main.win.on('focus', () => setTimeout(keepMemoAbove, 30));
-  main.win.on('closed', () => {
-    // 프로그램을 끄는 중이 아닌데 달력 창이 없어지면 잠시 뒤 다시 띄운다
-    const wasEmbedded = main.embedded; main.embedded = false;
-    if (wasEmbedded) { refreshDesktop(main.parent); setTimeout(repaintWallpaper, 300); }   // 사라진 자리의 검은 네모 지우기
-    if (quitting) return;
-    if (managed.main === main) setTimeout(() => { if (!quitting) recoverMain(); }, 800);
-  });
+  main.win.on('closed', () => { main.embedded = false; });
   return main;
 }
+// 달력 창이 없으면 (예: 바탕화면에 붙어 있다가 윈도우 탐색기가 다시 시작돼 같이 닫힘) 그때 새로 만든다
 function ensureMain() {
   if (mainWin()) return mainWin();
   if (quitting || !app.isReady()) return null;
   createMainWindow();
   return mainWin();
-}
-function recoverMain() {
-  if (mainWin()) return;
-  const m = createMainWindow();
-  // 바탕화면에 붙여 둔 상태였으면 다시 붙이기
-  m.win.webContents.once('did-finish-load', () => { if (mode === 'desktop') setTimeout(enterDesktopMode, 500); });
 }
 
 function createWindows() {
@@ -505,10 +489,5 @@ app.on('before-quit', () => {
   // 종료 전에 바탕화면에서 떼어내야 창이 깔끔하게 닫힌다
   allWindows().forEach(unembed);
 });
-app.on('will-quit', () => { globalShortcut.unregisterAll(); if (mode === 'desktop') repaintWallpaper(); else refreshDesktop(); });
-// 그래픽 처리(GPU)가 다시 시작되면 투명 창이 검게 남을 수 있어서 달력·메모를 다시 그린다
-app.on('child-process-gone', (_e, d) => {
-  if (quitting || d.type !== 'GPU') return;
-  setTimeout(() => allWindows().forEach(m => { if (!m.win.isDestroyed()) m.win.webContents.reload(); }), 1500);
-});
+app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());
