@@ -79,7 +79,7 @@ let mode = 'edit';          // 'desktop' = 아이콘 뒤에 고정, 'edit' = 편
 let fallbackTimer = null;   // 붙이기에 실패했을 때 맨 뒤로 보내는 타이머
 
 function embed(m) {
-  if (!win32 || m.embedded || !m.win.isVisible()) return;
+  if (!win32 || !m || m.embedded || m.win.isDestroyed() || !m.win.isVisible()) return;
   try {
     const hwnd = hwndOf(m.win);
     const r = {}; win32.GetWindowRect(hwnd, r);
@@ -94,7 +94,8 @@ function embed(m) {
 }
 
 function unembed(m) {
-  if (!win32 || !m.embedded) return;
+  if (!win32 || !m || !m.embedded) return;
+  if (m.win.isDestroyed()) { m.embedded = false; return; }
   try {
     const hwnd = hwndOf(m.win);
     const r = {}; win32.GetWindowRect(hwnd, r);
@@ -128,6 +129,7 @@ function sinkToBottom() {
 }
 
 function enterDesktopMode() {
+  if (!ensureMain()) return;
   mode = 'desktop';
   state.mode = mode; saveState();
   embed(managed.main);          // 바탕화면 아이콘 뒤에는 달력만 붙인다
@@ -142,8 +144,10 @@ function enterEditMode() {
   mode = 'edit';
   state.mode = mode; saveState();
   if (fallbackTimer) { clearInterval(fallbackTimer); fallbackTimer = null; }
+  // 달력 창이 사라졌으면(바탕화면에 붙어 있다가 윈도우 탐색기가 다시 시작될 때 등) 새로 만든다
+  const main = ensureMain(); if (!main) return;
   unembed(managed.main);
-  mainWin().show(); mainWin().focus();
+  main.show(); main.focus();
   setTimeout(keepMemoAbove, 50);
   notifyRenderers();
 }
@@ -309,17 +313,40 @@ function showUpdateError(err) {
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();
-app.on('second-instance', () => managed.main && enterEditMode());
+app.on('second-instance', () => { if (app.isReady() && managed.main) enterEditMode(); });
+
+// 달력 창 만들기 (처음 켤 때, 그리고 창이 사라졌을 때 다시)
+function createMainWindow() {
+  const main = makeWindow('main', 'index.html', { width: 1000, height: 700, minWidth: 640, minHeight: 460 });
+  main.win.on('focus', () => setTimeout(keepMemoAbove, 30));
+  main.win.on('closed', () => {
+    // 프로그램을 끄는 중이 아닌데 달력 창이 없어지면 잠시 뒤 다시 띄운다
+    if (quitting) return;
+    if (managed.main === main) { main.embedded = false; setTimeout(() => { if (!quitting) recoverMain(); }, 800); }
+  });
+  return main;
+}
+function ensureMain() {
+  if (mainWin()) return mainWin();
+  if (quitting || !app.isReady()) return null;
+  createMainWindow();
+  return mainWin();
+}
+function recoverMain() {
+  if (mainWin()) return;
+  const m = createMainWindow();
+  // 바탕화면에 붙여 둔 상태였으면 다시 붙이기
+  m.win.webContents.once('did-finish-load', () => { if (mode === 'desktop') setTimeout(enterDesktopMode, 500); });
+}
 
 function createWindows() {
   const wa = screen.getPrimaryDisplay().workArea;
-  const main = makeWindow('main', 'index.html', { width: 1000, height: 700, minWidth: 640, minHeight: 460 });
+  const main = createMainWindow();
   makeWindow('memo', 'memo.html', {
     width: 320, height: 380, minWidth: 220, minHeight: 220,
     x: wa.x + wa.width - 340, y: wa.y + 20, show: state.memoVisible !== false,
   });
 
-  main.win.on('focus', () => setTimeout(keepMemoAbove, 30));
   const memo = managed.memo;
   memo.win.on('blur', () => { if (mode === 'desktop') setTimeout(sinkToBottom, 30); });
 
