@@ -150,12 +150,32 @@
   .ev .meta { color:var(--muted); font-size:12px; }
   .ev .txt { word-break:break-all; cursor:text; }
   /* 완료 체크 (일정을 만들 때 '완료 체크 쓰기'를 켠 일정만) */
-  .ev .evck { width:18px; height:18px; flex:none; margin:0; cursor:pointer; accent-color:var(--accent); }
+  /* 귀여운 체크 상자: 모서리가 둥근 정사각형, 체크하면 통 튀면서 모양(✓ ♥ ★ ✿)이 찍힌다 */
+  :root { --ckmark:'✓'; }
+  .cbox { appearance:none; -webkit-appearance:none; width:20px; height:20px; flex:none; margin:0; cursor:pointer; position:relative;
+          border-radius:6px; border:2px solid color-mix(in srgb, var(--fg) 55%, transparent); background:color-mix(in srgb, var(--fg) 8%, transparent);
+          transition:background .15s, border-color .15s, transform .1s; }
+  .cbox:hover { border-color:var(--accent); transform:scale(1.06); }
+  .cbox:checked { background:var(--accent); border-color:var(--accent); }
+  .cbox:checked::after { content:var(--ckmark); position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+          color:#fff; font-size:13px; font-weight:900; line-height:1; text-shadow:0 1px 1px rgba(0,0,0,.25); }
+  .cbox.pop { animation:ckpop .42s cubic-bezier(.3,1.6,.5,1); }
+  .cbox.pop::before { content:''; position:absolute; inset:-2px; border-radius:8px; border:2px solid var(--accent); animation:ckring .5s ease-out forwards; pointer-events:none; }
+  @keyframes ckpop { 0% { transform:scale(.6); } 60% { transform:scale(1.22) rotate(-6deg); } 100% { transform:scale(1); } }
+  @keyframes ckring { from { transform:scale(1); opacity:.9; } to { transform:scale(1.9); opacity:0; } }
+  .ev .evck { margin-left:-2px; }
+  .ckmarks { display:flex; gap:6px; }
+  .ckmarks button { width:38px; height:32px; padding:0; font-size:16px; font-weight:900; border-radius:9px; }
+  .ckmarks button.on { background:var(--accent); color:#fff; text-shadow:none; }
   .ev.done .txt { text-decoration:line-through; opacity:.55; }
-  .chip .ck { cursor:pointer; margin-right:3px; }
+  /* 달력 띠 안의 작은 체크 상자 (둥근 정사각형) */
+  .chip .ck { display:inline-flex; align-items:center; justify-content:center; vertical-align:-2px; width:13px; height:13px; margin-right:4px;
+              border-radius:4px; border:1.5px solid currentColor; cursor:pointer; box-sizing:border-box; font-size:9px; font-weight:900; line-height:1; }
+  .chip .ck.on { background:currentColor; }
+  .chip .ck.on::after { content:var(--ckmark); color:var(--chipbg); }
   .chip.done { opacity:.55; text-decoration:line-through; }
   .ckopt { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--fg) !important; cursor:pointer; }
-  .ckopt input { width:17px; height:17px; margin:0; accent-color:var(--accent); }
+  .ckopt input { width:17px; height:17px; margin:0; accent-color:var(--accent); border-radius:5px; }
   .dedit .ckrow { font-size:12px; gap:6px; cursor:pointer; }
   .dedit .ckrow input { flex:none; width:15px; height:15px; margin:0; }
   .ev button { padding:2px 8px; font-size:13px; }
@@ -242,6 +262,8 @@
       <label>강조색</label>
       <div class="swatches" id="acSw"></div>
       <div class="row">투명도 <input type="range" id="opacity" min="10" max="100"></div>
+      <label>완료 체크 모양</label>
+      <div class="ckmarks" id="ckMarks"></div>
       <div class="row"><input type="checkbox" id="mon"> 월요일부터 시작</div>
       <div class="row"><input type="checkbox" id="auto"> 컴퓨터 켤 때 자동 실행</div>
 
@@ -359,7 +381,18 @@ function applyCfg() {
   swatches('acSw', AC_COLORS, cfg.accent, set('accent'));
   swatches('evSw', EV_COLORS, cfg.evColor, set('evColor'));
   $('useCheck').checked = !!cfg.useCheck;
+  // 체크 모양
+  const mark = CK_MARKS.includes(cfg.ckMark) ? cfg.ckMark : '✓';
+  document.documentElement.style.setProperty('--ckmark', JSON.stringify(mark));
+  $('ckMarks').innerHTML = '';
+  CK_MARKS.forEach(mk => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = mk; b.className = mk === mark ? 'on' : '';
+    b.title = { '✓': '체크', '♥': '하트', '★': '별', '✿': '꽃' }[mk];
+    b.onclick = () => { cfg.ckMark = mk; save('cfg', cfg); applyCfg(); };
+    $('ckMarks').append(b);
+  });
 }
+const CK_MARKS = ['✓', '♥', '★', '✿'];
 
 // ── 검색 · 색 보기 ──
 let query = '';
@@ -444,7 +477,8 @@ function render() {
       if (ev.check) {
         c.classList.toggle('done', !!ev.done);
         // 체크 상자는 이름이 보이는 칸에만 (누르면 완료/취소)
-        if (label) { const b = document.createElement('span'); b.className = 'ck'; b.textContent = ev.done ? '☑' : '☐'; b.title = ev.done ? '완료 취소' : '완료로 표시'; c.prepend(b); }
+        if (label) { const b = document.createElement('span'); b.className = 'ck' + (ev.done ? ' on' : ''); b.title = ev.done ? '완료 취소' : '완료로 표시'; c.prepend(b); }
+        c.style.setProperty('--chipbg', ev.color);
       }
       c.title = ev.text + '\n끌어서 다른 날짜로 옮기기 · Ctrl 누른 채 끌면 복사 · 양 끝을 끌어서 기간 바꾸기 · 더블클릭해서 이름 수정'; c.dataset.id = ev.id;
       // 시작 날/끝 날 칸에는 끌어서 날짜를 바꾸는 손잡이
@@ -539,8 +573,8 @@ function renderSide() {
   list.forEach(ev => {
     const row = document.createElement('div'); row.className = 'ev' + (searching ? ' result' : '') + (ev.check && ev.done ? ' done' : ''); row.style.borderLeftColor = ev.color;
     if (ev.check) {
-      const ck = document.createElement('input'); ck.type = 'checkbox'; ck.className = 'evck'; ck.checked = !!ev.done; ck.title = '완료';
-      ck.onchange = () => { ev.done = ck.checked; touch(ev); saveEvents(); render(); };
+      const ck = document.createElement('input'); ck.type = 'checkbox'; ck.className = 'cbox evck' + (justChecked === ev.id && ev.done ? ' pop' : ''); ck.checked = !!ev.done; ck.title = '완료';
+      ck.onchange = () => { ev.done = ck.checked; justChecked = ev.id; touch(ev); saveEvents(); render(); };
       row.append(ck);
     }
     const info = document.createElement('div'); info.className = 'info';
@@ -704,6 +738,7 @@ const diffDays = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
 // 목록의 '복사' → 위에 안내 띠가 뜨고, 달력에서 날짜를 누를 때마다 그 날에 붙여넣는다 (기간·시간·색은 그대로).
 // 다른 캘린더 탭으로 바꿔서 누르면 그 캘린더로 복사된다. Esc 또는 '그만'으로 끝내기.
 let clip = null;
+let justChecked = null;   // 방금 체크한 일정 (그 상자만 통 튀는 그림)
 function copyEvent(ev) {
   clip = { text: ev.text, time: ev.time || '', color: ev.color, check: !!ev.check, len: diffDays(ev.start, ev.end) };
   showClip();
@@ -766,7 +801,7 @@ $('days').addEventListener('mousedown', e => {
   if (chip && e.target.closest('.ck')) {   // 띠의 체크 상자 → 완료/취소
     e.preventDefault(); lastChip.id = null;
     const ev = events.find(x => x.id === chip.dataset.id);
-    if (ev) { ev.done = !ev.done; touch(ev); saveEvents(); render(); }
+    if (ev) { ev.done = !ev.done; justChecked = ev.id; touch(ev); saveEvents(); render(); }
     return;
   }
   if (chip) {   // 일정 띠를 잡으면: 끌면 옮기기, 그냥 놓으면 그 날짜 고르기
