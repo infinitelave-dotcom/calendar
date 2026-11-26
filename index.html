@@ -149,6 +149,15 @@
   .ev .info { flex:1; display:flex; flex-direction:column; gap:2px; min-width:0; }
   .ev .meta { color:var(--muted); font-size:12px; }
   .ev .txt { word-break:break-all; cursor:text; }
+  /* 완료 체크 (일정을 만들 때 '완료 체크 쓰기'를 켠 일정만) */
+  .ev .evck { width:18px; height:18px; flex:none; margin:0; cursor:pointer; accent-color:var(--accent); }
+  .ev.done .txt { text-decoration:line-through; opacity:.55; }
+  .chip .ck { cursor:pointer; margin-right:3px; }
+  .chip.done { opacity:.55; text-decoration:line-through; }
+  .ckopt { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--fg) !important; cursor:pointer; }
+  .ckopt input { width:17px; height:17px; margin:0; accent-color:var(--accent); }
+  .dedit .ckrow { font-size:12px; gap:6px; cursor:pointer; }
+  .dedit .ckrow input { flex:none; width:15px; height:15px; margin:0; }
   .ev button { padding:2px 8px; font-size:13px; }
   input.edit { width:100%; background:var(--soft); color:var(--fg); border:1px solid var(--accent); border-radius:6px; padding:3px 6px; font-size:15px; font-family:inherit; }
   .empty { color:var(--muted); font-size:14px; }
@@ -288,6 +297,7 @@
       </div>
       <div class="hint">달력에서 날짜를 끌어서 여러 날을 한 번에 고를 수 있어요</div>
       <input class="field" type="time" id="time" title="시간 (선택, 넣으면 알림)">
+      <label class="ckopt" title="켜면 이 일정에 체크 상자가 생겨서, 끝낸 일정을 ✓ 로 표시할 수 있어요"><input type="checkbox" id="useCheck"> 완료 체크 쓰기</label>
       <label>색상</label>
       <div class="swatches" id="evSw"></div>
       <button class="primary" type="submit">일정 추가</button>
@@ -348,6 +358,7 @@ function applyCfg() {
   swatches('fgSw', FG_COLORS, cfg.fg, set('fg'), true);
   swatches('acSw', AC_COLORS, cfg.accent, set('accent'));
   swatches('evSw', EV_COLORS, cfg.evColor, set('evColor'));
+  $('useCheck').checked = !!cfg.useCheck;
 }
 
 // ── 검색 · 색 보기 ──
@@ -428,7 +439,13 @@ function render() {
       const rowStart = i % 7 === 0, rowEnd = i % 7 === 6;
       c.className = 'chip' + (multi && k > ev.start && !rowStart ? ' cl' : '') + (multi && k < ev.end && !rowEnd ? ' cr' : '');
       c.style.background = ev.color; c.style.color = isLight(ev.color) ? '#1B2A41' : '#F6F4EE';
-      c.textContent = (!multi || k === ev.start || rowStart) ? (ev.time && k === ev.start ? ev.time + ' ' : '') + ev.text : ' ';
+      const label = !multi || k === ev.start || rowStart;
+      c.textContent = label ? (ev.time && k === ev.start ? ev.time + ' ' : '') + ev.text : ' ';
+      if (ev.check) {
+        c.classList.toggle('done', !!ev.done);
+        // 체크 상자는 이름이 보이는 칸에만 (누르면 완료/취소)
+        if (label) { const b = document.createElement('span'); b.className = 'ck'; b.textContent = ev.done ? '☑' : '☐'; b.title = ev.done ? '완료 취소' : '완료로 표시'; c.prepend(b); }
+      }
       c.title = ev.text + '\n끌어서 다른 날짜로 옮기기 · Ctrl 누른 채 끌면 복사 · 양 끝을 끌어서 기간 바꾸기 · 더블클릭해서 이름 수정'; c.dataset.id = ev.id;
       // 시작 날/끝 날 칸에는 끌어서 날짜를 바꾸는 손잡이
       if (k === ev.start) { const h = document.createElement('span'); h.className = 'h hs'; h.dataset.edge = 'start'; c.append(h); }
@@ -515,11 +532,17 @@ function renderSide() {
     $('selLabel').textContent = a === b ? `${fmt(a)} ${DOW[parse(a).getDay()]}요일` : `${fmt(a)} ~ ${fmt(b)} (${days(a, b)}일)`;
     list = shown().filter(e => e.start <= b && a <= e.end)
       .sort((x, y) => x.start.localeCompare(y.start) || (x.time || '99').localeCompare(y.time || '99'));
-    $('selSub').textContent = list.length ? `일정 ${list.length}개` + (colorFilter.size ? ' (고른 색만)' : '') : '';
+    const cks = list.filter(e => e.check);
+    $('selSub').textContent = list.length ? `일정 ${list.length}개` + (cks.length ? ` · 완료 ${cks.filter(e => e.done).length}/${cks.length}` : '') + (colorFilter.size ? ' (고른 색만)' : '') : '';
   }
   $('list').innerHTML = list.length ? '' : `<div class="empty">${searching ? '찾는 일정이 없습니다.' : colorFilter.size ? '고른 색의 일정이 없습니다.' : '일정이 없습니다. 아래에서 추가하세요.'}</div>`;
   list.forEach(ev => {
-    const row = document.createElement('div'); row.className = 'ev' + (searching ? ' result' : ''); row.style.borderLeftColor = ev.color;
+    const row = document.createElement('div'); row.className = 'ev' + (searching ? ' result' : '') + (ev.check && ev.done ? ' done' : ''); row.style.borderLeftColor = ev.color;
+    if (ev.check) {
+      const ck = document.createElement('input'); ck.type = 'checkbox'; ck.className = 'evck'; ck.checked = !!ev.done; ck.title = '완료';
+      ck.onchange = () => { ev.done = ck.checked; touch(ev); saveEvents(); render(); };
+      row.append(ck);
+    }
     const info = document.createElement('div'); info.className = 'info';
     // 날짜 줄은 항상 보여 주고, 더블클릭하면 날짜·시간을 고칠 수 있다
     const meta = [ev.start !== ev.end ? `${fmt(ev.start)} ~ ${fmt(ev.end)}` : fmt(ev.start), ev.time].filter(Boolean).join(' · ');
@@ -651,7 +674,10 @@ function editDates(ev, el) {
   const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'ok'; ok.textContent = '저장';
   const no = document.createElement('button'); no.type = 'button'; no.textContent = '취소';
   const r1 = document.createElement('div'), r2 = document.createElement('div');
-  r1.append(s, '~', e); r2.append(t, ok, no); box.append(r1, r2);
+  const r3 = document.createElement('label'); r3.className = 'ckrow';
+  const uc = document.createElement('input'); uc.type = 'checkbox'; uc.checked = !!ev.check;
+  r3.append(uc, '완료 체크 쓰기');
+  r1.append(s, '~', e); r2.append(t, ok, no); box.append(r1, r3, r2);
   el.replaceWith(box); s.focus();
   // 시작일을 종료일 뒤로 바꾸면 종료일도 따라간다
   s.onchange = () => { if (s.value && e.value && e.value < s.value) e.value = s.value; };
@@ -662,6 +688,7 @@ function editDates(ev, el) {
         ev.start = a; ev.end = b; ev.time = t.value; touch(ev); saveEvents();
         localStorage.removeItem('notified:' + ev.id);
       }
+      if (uc.checked !== !!ev.check) { ev.check = uc.checked; if (!ev.check) ev.done = false; touch(ev); saveEvents(); }
     }
     render();
   };
@@ -678,7 +705,7 @@ const diffDays = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
 // 다른 캘린더 탭으로 바꿔서 누르면 그 캘린더로 복사된다. Esc 또는 '그만'으로 끝내기.
 let clip = null;
 function copyEvent(ev) {
-  clip = { text: ev.text, time: ev.time || '', color: ev.color, len: diffDays(ev.start, ev.end) };
+  clip = { text: ev.text, time: ev.time || '', color: ev.color, check: !!ev.check, len: diffDays(ev.start, ev.end) };
   showClip();
 }
 function showClip() {
@@ -691,7 +718,7 @@ function showClip() {
 function endClip() { clip = null; showClip(); }
 // 일정 하나를 다른 날짜로 복사 (붙여넣기·Ctrl+끌기 공통)
 function pasteEvent(src, start, cal) {
-  const ev = touch({ id: uid(), cal, text: src.text, start, end: addDays(start, src.len), time: src.time || '', color: src.color });
+  const ev = touch({ id: uid(), cal, text: src.text, start, end: addDays(start, src.len), time: src.time || '', color: src.color, check: !!src.check, done: false });
   events.push(ev); saveEvents();
   return ev;
 }
@@ -736,6 +763,12 @@ $('days').addEventListener('mousedown', e => {
     if (row) row._edit();
     return;
   }
+  if (chip && e.target.closest('.ck')) {   // 띠의 체크 상자 → 완료/취소
+    e.preventDefault(); lastChip.id = null;
+    const ev = events.find(x => x.id === chip.dataset.id);
+    if (ev) { ev.done = !ev.done; touch(ev); saveEvents(); render(); }
+    return;
+  }
   if (chip) {   // 일정 띠를 잡으면: 끌면 옮기기, 그냥 놓으면 그 날짜 고르기
     const ev = events.find(x => x.id === chip.dataset.id);
     const edge = e.target.closest('.h');
@@ -765,7 +798,7 @@ window.addEventListener('mouseup', () => {
     document.body.classList.remove('moving', 'resizing', 'copying');
     if (copy && s0 !== ev.start) {   // Ctrl+끌기: 새 날짜에 복사본
       lastChip.id = null;
-      pasteEvent({ text: ev.text, time: ev.time, color: ev.color, len: diffDays(ev.start, ev.end) }, s0, calOf(ev));
+      pasteEvent({ text: ev.text, time: ev.time, color: ev.color, check: ev.check, len: diffDays(ev.start, ev.end) }, s0, calOf(ev));
       selStart = selEnd = over;
     } else if (copy) {
       selStart = selEnd = from;
@@ -804,7 +837,9 @@ $('form').onsubmit = e => {
   const text = $('text').value.trim(); if (!text) { $('text').focus(); return; }
   let a = $('startDate').value || selStart, b = $('endDate').value || a;
   if (b < a) [a, b] = [b, a];
-  events.push(touch({ id: uid(), cal: activeCal, text, start: a, end: b, time: $('time').value, color: cfg.evColor }));
+  const check = $('useCheck').checked;
+  if (cfg.useCheck !== check) { cfg.useCheck = check; save('cfg', cfg); }   // 다음에도 같은 선택으로
+  events.push(touch({ id: uid(), cal: activeCal, text, start: a, end: b, time: $('time').value, color: cfg.evColor, check, done: false }));
   saveEvents(); $('text').value = ''; $('time').value = ''; render();
 };
 $('opacity').oninput = $('opacity2').oninput = e => { cfg.opacity = +e.target.value; save('cfg', cfg); applyCfg(); };
