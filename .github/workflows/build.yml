@@ -16,9 +16,21 @@ jobs:
       - run: npm install
       # 새 버전(package.json 의 version)이면 GitHub Releases 에 v버전 으로 올린다.
       # 설치된 앱은 여기에 올라온 latest.yml 을 보고 업데이트 여부를 판단한다.
+      # 파일을 모두 올리는 동안은 '임시(draft)'로 두었다가, 다 올라간 뒤에 공개한다.
+      # (올리는 도중에 앱이 업데이트를 확인하면 latest.yml 을 못 찾는 오류가 났었다)
       - run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the release after every file is uploaded
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          V="v$(node -p "require('./package.json').version")"
+          if gh release view "$V" --json isDraft -q .isDraft | grep -q true; then
+            gh release view "$V" --json assets -q '.assets[].name' | grep -qx latest.yml
+            gh release edit "$V" --draft=false --latest
+          fi
       - name: Check native module is packaged
         shell: bash
         run: npx --yes @electron/asar list dist/win-unpacked/resources/app.asar | grep -q koffi || ls dist/win-unpacked/resources/app.asar.unpacked/node_modules/koffi

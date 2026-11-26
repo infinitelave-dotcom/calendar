@@ -341,7 +341,13 @@ function checkForUpdates(manual) {
   }).catch(err => { if (manual) showUpdateError(err); updateBusy = false; });
 }
 function showUpdateError(err) {
-  dialog.showMessageBox({ type: 'warning', message: '업데이트를 확인하지 못했습니다.', detail: String(err && err.message || err).slice(0, 300), buttons: ['확인'] });
+  const msg = String(err && err.message || err);
+  // 새 버전을 막 올리는 중이면 (파일이 아직 다 안 올라감) 잠시 뒤 다시 하면 된다
+  if (/latest\.yml|404|HttpError: 40[34]/.test(msg)) {
+    dialog.showMessageBox({ type: 'info', message: '지금 새 버전을 올리는 중이에요.', detail: '몇 분 뒤에 다시 "업데이트 확인"을 눌러 주세요.', buttons: ['확인'] });
+    return;
+  }
+  dialog.showMessageBox({ type: 'warning', message: '업데이트를 확인하지 못했습니다.', detail: msg.slice(0, 300), buttons: ['확인'] });
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();
